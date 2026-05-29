@@ -1,0 +1,61 @@
+name = "arona-chat"
+main = "src/index.ts"
+compatibility_date = "2026-04-11"
+
+[[d1_databases]]
+binding = "D1_DB"
+database_name = "arona-chat-db"
+database_id = "your-d1-database-id"
+
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "arona-chat-r2"
+
+[durable_objects]
+bindings = [
+  { name = "CHAT_SESSION_DO", class_name = "ChatSessionDurableObject" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = [
+  "ChatSessionDurableObject"
+]
+
+# Keep observability off by default in the public template.
+[observability]
+[observability.logs]
+enabled = false
+invocation_logs = false
+
+[observability.traces]
+
+[vars]
+# Public defaults.
+API_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
+BRAVE_SEARCH_API_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
+
+# Set these in Cloudflare secrets or copy backend/.dev.vars.example to backend/.dev.vars.
+# AI_API_KEY = ""
+# BRAVE_SEARCH_API_TOKEN = ""
+# R2_ACCESS_KEY_ID = ""
+# R2_SECRET_ACCESS_KEY = ""
+# R2_ENDPOINT = "https://<account-id>.r2.cloudflarestorage.com"
+# AUTH_PASSWORD = ""
+# AUTH_TOKEN_SECRET = ""
+
+# Optional runtime values for deployments that expose R2 or the API behind a custom host.
+# R2_PUBLIC_BASE_URL = "https://<your-r2-public-host>"
+# R2_PROXY_DOMAIN = "<your-api-proxy-host>"
+
+# Uncomment only after replacing the example domains with real hosts.
+# [[routes]]
+# pattern = "arona-r2.example.com"
+# custom_domain = true
+#
+# [[routes]]
+# pattern = "arona-api.example.com"
+# custom_domain = true
+
+[build]
+command = "npm run build"

@@ -1,0 +1,16 @@
+# Copy this file to backend/.dev.vars for local development.
+# Do not commit backend/.dev.vars.
+
+API_ENDPOINT=https://openrouter.ai/api/v1/chat/completions
+BRAVE_SEARCH_API_ENDPOINT=https://api.search.brave.com/res/v1/web/search
+
+AI_API_KEY=replace-me
+BRAVE_SEARCH_API_TOKEN=replace-me
+R2_ACCESS_KEY_ID=replace-me
+R2_SECRET_ACCESS_KEY=replace-me
+R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+
+AUTH_PASSWORD=
+AUTH_TOKEN_SECRET=
+R2_PUBLIC_BASE_URL=https://<your-r2-public-host>
+R2_PROXY_DOMAIN=<your-api-proxy-host>

@@ -1,0 +1,1 @@
+export const SESSION_TITLE_MAX_LENGTH = 60;

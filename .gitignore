@@ -1,0 +1,39 @@
+ref/
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+frontend/dist/
+backend/.wrangler/
+shared/dist/
+coverage/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+backend/.dev.vars
+backend/.dev.vars.local*
+
+# Local agent/workspace state
+skills-lock.json
+backend/wrangler.local.toml
+
+# IDE / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+backend/src/build-info.generated.ts
+
+# TMP
+tmp/
