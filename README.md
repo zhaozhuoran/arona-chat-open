@@ -28,6 +28,10 @@ graph TD
     DO <-->|Call AI Inference| API[OpenRouter API]
 ```
 
+## Screenshots
+
+![demo](assests/screenshots/screenshot-1.png)
+
 ## Key Technical Highlights
 
 - **Multi-Model Intelligence & Cost Analytics:** Seamlessly integrated with OpenRouter, featuring native, real-time token usage and USD cost tracking.

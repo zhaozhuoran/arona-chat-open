@@ -28,6 +28,10 @@ graph TD
     DO <-->|调用 AI 推理| API[OpenRouter API]
 ```
 
+## 截图
+
+![demo](assests/screenshots/screenshot-1.png)
+
 ## 技术亮点
 
 - **多模型智能与成本分析**：深度集成 OpenRouter，支持多种前沿 LLM，并提供原生的实时 Token 用量和美元成本追踪。
