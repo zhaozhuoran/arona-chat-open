@@ -17,6 +17,20 @@ Arona Chat is a fan-made, Blue Archive themed chat application built with React,
 - `shared/` - Shared TypeScript types and build outputs
 - `docs/` - Project notes and copyright notices
 
+## Repository Status
+
+This repository is a public synchronized build of Arona Chat.
+
+- The upstream repository is private and is the source of active development.
+- This repository is updated periodically to reflect stable upstream versions.
+- Development does not happen here.
+
+## Issues and Pull Requests
+
+- Issues are welcome for bug reports, feedback, or usage questions.
+- Pull requests are generally not accepted, as this repository is not used for active development.
+- Feature contributions should not be submitted here.
+
 ## Quick Start
 
 1. Install dependencies:

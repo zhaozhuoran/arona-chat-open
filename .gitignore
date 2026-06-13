@@ -37,3 +37,4 @@ backend/src/build-info.generated.ts
 
 # TMP
 tmp/
+.kagent
