@@ -1,12 +1,40 @@
 # 📌 Arona Chat Evaluation & Demo Guide
 
+## 🌐 Public Preview
+
+**Preview URL:** https://arona-chat-open.pages.dev/
+
+**Password:** `preview`
+
+To make evaluation easier for reviewers, a public preview deployment is available.
+
+The preview deployment preserves the authentication flow and overall user experience while disabling AI inference to avoid ongoing infrastructure and API costs.
+
+Available functionality includes:
+
+- Authentication flow
+- Chat interface
+- Session management
+- Workspace navigation
+- Attachment management
+- Cost tracking interface
+- General application workflow
+
+The following functionality is intentionally disabled:
+
+- AI inference requests
+- OpenRouter API integration
+- Production model execution
+
+---
+
 ## Overview
 
 Arona Chat is a full-stack AI chat application built on the Cloudflare ecosystem (Workers, D1, R2, and Durable Objects).
 
-Due to its reliance on paid infrastructure services, particularly Cloudflare resources and OpenRouter API usage costs, a continuously hosted public demo is not provided.
+A public preview deployment is available to make evaluation easier for reviewers. To keep infrastructure and AI inference costs manageable, the public deployment runs in **Preview Mode**, where AI inference is disabled.
 
-Instead, this guide offers a complete overview of the system through feature breakdowns, visual screenshots, and architectural explanations to support full evaluation of the project.
+This guide provides a complete overview of the system through feature breakdowns, visual screenshots, and architectural explanations.
 
 ---
 
@@ -30,11 +58,15 @@ The following sections demonstrate the core user interface and functionality of 
 
 ## 🛠 How to Evaluate This Project
 
-Even without a live demo, Arona Chat can be fully evaluated through the following methods:
+Arona Chat can be evaluated through the following methods:
 
-### Option 1: Local Deployment (Recommended)
+### Option 1: Public Preview (Recommended)
 
-This is the best way to experience the full system functionality:
+Explore the deployed preview to experience the application's interface, navigation, and workflow.
+
+### Option 2: Local Deployment
+
+This is the best way to experience the full system functionality, including AI inference:
 
 1. Clone the repository
 2. Install dependencies:
@@ -52,7 +84,7 @@ This is the best way to experience the full system functionality:
 
 ---
 
-### Option 2: Code-Level Architecture Review
+### Option 3: Code-Level Architecture Review
 
 The system behavior can be understood by reviewing the following core modules:
 
@@ -86,6 +118,8 @@ graph TD
 
 ## 📌 Notes
 
-- This project prioritizes system architecture and performance stability over always-on public hosting.
-- All core functionality is fully implemented and reproducible in a local environment.
-- The system is designed with scalability in mind under serverless constraints.
+- The public deployment runs in Preview Mode and is intended for evaluation purposes.
+- AI inference is disabled in the public preview to avoid ongoing API costs.
+- The complete implementation is available in the repository and can be reproduced locally.
+- All core architecture, caching, session management, and backend logic are included in the source code.
+- The system is designed with scalability, performance, and cost efficiency in mind under serverless constraints.
