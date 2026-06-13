@@ -1,88 +1,91 @@
+English | [简体中文](README-cn.md)
+
 # Arona Chat
 
-Arona Chat is a refined AI chat interface inspired by the Blue Archive "Shittim Chest" UI. Built as a high-performance
-monorepo, it leverages the Cloudflare serverless ecosystem to deliver a cost-efficient architecture utilizing Workers,
-D1, R2, and Durable Objects.
+![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)
+![Status](https://img.shields.io/badge/Status-Public--Mirror-orange.svg)
 
-Key Technical Highlights:
+Arona Chat is a high-performance AI chat interface inspired by the _Blue Archive_ "Shittim Chest" UI. Built as a monorepo, it leverages the Cloudflare serverless ecosystem (Workers, D1, R2, Durable Objects) to deliver a cost-efficient, stateful chat experience.
 
-- Multi-Model Intelligence & Cost Analytics: Seamlessly integrated with OpenRouter, enabling access to a diverse
-  array of cutting-edge LLMs with native, real-time token usage and USD cost tracking.
-- Stateful, Resilient SSE Orchestration: By utilizing Durable Objects to decouple client connectivity from inference
-  processing, Arona Chat enables robust, asynchronous background execution of SSE (Server-Sent Events) streams. This
-  ensures uninterrupted processing despite network drops or client disconnects, while supporting seamless
-  reconnection and guaranteeing reliable, atomic persistence of conversation history to D1 upon completion.
+---
+
+## Architecture Overview
+
+Arona Chat uses **Durable Objects** to decouple client connectivity from inference, ensuring resilient, asynchronous SSE orchestration.
+
+```mermaid
+graph TD
+    Client[Browser/Client] <-->|API Requests & SSE Streams| Worker[Cloudflare Worker]
+
+    %% Worker Interaction Paths
+    Worker <-->|Auth/Config/Library| D1[(Cloudflare D1)]
+    Worker <-->|Attachment Storage/Proxy| R2[(Cloudflare R2)]
+    Worker <-->|Management/Orchestration| DO[Durable Objects]
+
+    %% DO Interaction Paths
+    DO <-->|SSE Event Stream/Persistence| Client
+    DO <-->|Session Metadata/History| D1
+    DO <-->|Call AI Inference| API[OpenRouter API]
+```
+
+## Key Technical Highlights
+
+- **Multi-Model Intelligence & Cost Analytics:** Seamlessly integrated with OpenRouter, featuring native, real-time token usage and USD cost tracking.
+- **Stateful, Resilient SSE Orchestration:** Decoupled connectivity via Durable Objects ensures uninterrupted processing despite network drops and guarantees atomic persistence to D1.
 
 ## Features
 
 - Chat sessions with route-based navigation
 - Password and passkey authentication
 - Workspaces, attachments, and library management
-- Model selection, usage tracking, and chat settings
-- Cloudflare D1 for data storage and Durable Objects for session state
+- Model selection and chat settings
 
-## Repository Layout
+## Prerequisites
 
-- `frontend/` - React UI and static assets
-- `backend/` - Cloudflare Worker API, Wrangler config, and database migrations
-- `shared/` - Shared TypeScript types and build outputs
-- `docs/` - Project notes and copyright notices
+Before running the project locally, ensure you have the following installed:
 
-## Repository Status
-
-This is a public mirror of the Arona Chat project.
-
-Development happens in a private upstream repository. This repo is periodically updated with stable versions.
-
-## Contributions
-
-- Issues are welcome for bug reports and feedback.
-- Pull requests are not the primary workflow for this repository, as development is handled upstream.
+- **Node.js**: v20+ (LTS recommended)
+- **Wrangler CLI**: `npm install -g wrangler`
+- **Cloudflare Account**: For D1/R2/DO deployment
 
 ## Quick Start
 
-1. Install dependencies:
+1. **Install dependencies:**
 
    ```bash
    npm install
    ```
 
-2. Prepare local backend variables:
+2. **Prepare backend variables:**
 
    ```bash
    cp backend/.dev.vars.example backend/.dev.vars
+   # Edit backend/.dev.vars with your API keys and configuration
    ```
 
-   Fill in the values for your local environment or Cloudflare deployment.
-
-3. Start the app:
-
+3. **Start development:**
    ```bash
    npm run dev
    ```
 
-   This runs the frontend and backend dev servers together.
+_See `package.json` for all available scripts._
 
-## Common Scripts
+---
 
-- `npm run dev:frontend` - start the Vite frontend on port 3000
-- `npm run dev:backend` - start the Cloudflare Worker locally with Wrangler
-- `npm run build` - build the shared package and frontend
-- `npm run build:shared` - build the shared TypeScript package
-- `npm run build:backend` - deploy the backend with Wrangler
+## Repository Status
 
-## Configuration
+This is a **public mirror** of the Arona Chat project. Development occurs in a private upstream repository; this mirror is updated periodically with stable versions.
 
-- Public defaults and deployment placeholders live in `backend/wrangler.toml`.
-- Local secrets should go in `backend/.dev.vars`.
-- `backend/.dev.vars.example` shows the expected keys without committing secrets.
+## Contributions
+
+Issues are welcome for bug reports and feedback. Pull requests are not the primary workflow for this repository.
 
 ## Resource and Trademark Notice
 
-See [docs/RESOURCE_COPYRIGHT.md](docs/RESOURCE_COPYRIGHT.md) for the Blue Archive resource notice.
+See [docs/RESOURCE_COPYRIGHT.md](docs/RESOURCE_COPYRIGHT.md) for the _Blue Archive_ resource notice.
 
 This repository is a fan-made project and is not affiliated with Blue Archive, NEXON, Nexon Games, or Yostar. "Blue Archive" and "Arona" are trademarks and/or copyrights of their respective owners.
 
 ## License
 
-This repository is licensed under the GNU Affero General Public License v3. See [LICENSE](LICENSE).
+This repository is licensed under the **GNU Affero General Public License v3**. See [LICENSE](LICENSE).
