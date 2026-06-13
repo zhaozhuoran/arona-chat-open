@@ -1,6 +1,17 @@
 # Arona Chat
 
-Arona Chat is a fan-made, Blue Archive themed chat application built with React, TypeScript, Vite, Cloudflare Workers, D1, and R2.
+Arona Chat is a refined AI chat interface inspired by the Blue Archive "Shittim Chest" UI. Built as a high-performance
+monorepo, it leverages the Cloudflare serverless ecosystem to deliver a cost-efficient architecture utilizing Workers,
+D1, R2, and Durable Objects.
+
+Key Technical Highlights:
+
+- Multi-Model Intelligence & Cost Analytics: Seamlessly integrated with OpenRouter, enabling access to a diverse
+  array of cutting-edge LLMs with native, real-time token usage and USD cost tracking.
+- Stateful, Resilient SSE Orchestration: By utilizing Durable Objects to decouple client connectivity from inference
+  processing, Arona Chat enables robust, asynchronous background execution of SSE (Server-Sent Events) streams. This
+  ensures uninterrupted processing despite network drops or client disconnects, while supporting seamless
+  reconnection and guaranteeing reliable, atomic persistence of conversation history to D1 upon completion.
 
 ## Features
 
