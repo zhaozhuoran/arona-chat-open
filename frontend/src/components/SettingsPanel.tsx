@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { SYSTEM_PROMPT_TIMEZONE_OPTIONS, type ChatGenerationSettings, type LogLevel, type ModelOption, type PasskeyInfo, type ReasoningEffort, type UsageSummary, type UserProfile, type Workspace } from "@arona-chat/shared";
-import { BarChart2, Bot, ShieldCheck, UserRound, X } from "lucide-react";
+import { SYSTEM_PROMPT_TIMEZONE_OPTIONS, type ChatGenerationSettings, type LogLevel, type ModelOption, type PasskeyInfo, type ReasoningEffort, type ServiceTier, type UsageSummary, type UserProfile, type Workspace } from "@arona-chat/shared";
+import { BarChart2, Bot, ShieldCheck, UserRound, X, Settings2 } from "lucide-react";
 
-type SettingsTab = "profile" | "security" | "model" | "usage";
+type SettingsTab = "profile" | "security" | "model" | "usage" | "advanced";
 
 type ProfileUpdatePayload = {
   username?: string;
@@ -45,6 +45,7 @@ type SettingsPanelProps = {
   onRenameWorkspace: (workspaceId: string, name: string) => Promise<void>;
   onArchiveWorkspace: (workspaceId: string, archived?: boolean) => Promise<void>;
   onActivateWorkspace: (workspaceId: string) => Promise<void>;
+  onSyncUsage: () => Promise<void>;
   onRegisterPasskey: (nickname?: string) => Promise<void>;
   onRemovePasskey: (credentialId: string) => Promise<void>;
 };
@@ -95,6 +96,7 @@ export const SettingsPanel = ({
   onRenameWorkspace,
   onArchiveWorkspace,
   onActivateWorkspace,
+  onSyncUsage,
   onRegisterPasskey,
   onRemovePasskey,
 }: SettingsPanelProps) => {
@@ -105,9 +107,11 @@ export const SettingsPanel = ({
   const [conversationLibraryEnabled, setConversationLibraryEnabled] = useState(profile?.conversation_library_enabled ?? true);
   const [model, setModel] = useState(selectedModel);
   const [titleModelOption, setTitleModelOption] = useState(titleModel);
+  const [serviceTier, setServiceTier] = useState<ServiceTier>(chatSettings.service_tier);
   const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>(chatSettings.reasoning_effort);
   const [maxOutputTokens, setMaxOutputTokens] = useState(String(chatSettings.max_output_tokens));
   const [dailyBudgetUsd, setDailyBudgetUsd] = useState(String(chatSettings.daily_budget_usd));
+  const [temporaryDailyBudgetUsd, setTemporaryDailyBudgetUsd] = useState(chatSettings.temporary_daily_budget_usd === null ? "" : String(chatSettings.temporary_daily_budget_usd));
   const [webSearchEnabled, setWebSearchEnabled] = useState(chatSettings.web_search_enabled);
   const [webSearchMaxResults, setWebSearchMaxResults] = useState(String(chatSettings.web_search_max_results));
   const [logLevelOption, setLogLevelOption] = useState<LogLevel>(logLevel);
@@ -132,9 +136,11 @@ export const SettingsPanel = ({
   }, [titleModel]);
 
   useEffect(() => {
+    setServiceTier(chatSettings.service_tier);
     setReasoningEffort(chatSettings.reasoning_effort);
     setMaxOutputTokens(String(chatSettings.max_output_tokens));
     setDailyBudgetUsd(String(chatSettings.daily_budget_usd));
+    setTemporaryDailyBudgetUsd(chatSettings.temporary_daily_budget_usd === null ? "" : String(chatSettings.temporary_daily_budget_usd));
     setWebSearchEnabled(chatSettings.web_search_enabled);
     setWebSearchMaxResults(String(chatSettings.web_search_max_results));
   }, [chatSettings]);
@@ -172,7 +178,8 @@ export const SettingsPanel = ({
   }, [sortedModels, titleModelOption]);
 
   const usageDate = dailyUsageDate ?? getCurrentUtcDate();
-  const usageBudgetUsd = Number(chatSettings.daily_budget_usd ?? 0);
+  const temporaryDailyBudgetActive = chatSettings.temporary_daily_budget_usd !== null;
+  const usageBudgetUsd = Number(temporaryDailyBudgetActive ? chatSettings.temporary_daily_budget_usd : (chatSettings.daily_budget_usd ?? 0));
   const usageSpentUsd = Number(dailyUsage?.total_cost_usd ?? 0);
   const usageRemainingUsd = Math.max(0, usageBudgetUsd - usageSpentUsd);
   const usageProgressRatio = usageBudgetUsd > 0 ? Math.min(1, usageSpentUsd / usageBudgetUsd) : 0;
@@ -188,6 +195,7 @@ export const SettingsPanel = ({
     { id: "security", label: "Security", icon: <ShieldCheck size={15} /> },
     { id: "model", label: "Model & Chat", icon: <Bot size={15} /> },
     { id: "usage", label: "Usage", icon: <BarChart2 size={15} /> },
+    { id: "advanced", label: "Advanced", icon: <Settings2 size={15} /> },
   ];
 
   return (
@@ -201,6 +209,7 @@ export const SettingsPanel = ({
               {activeTab === "security" && "Passkeys and authentication"}
               {activeTab === "model" && "Model selection and generation settings"}
               {activeTab === "usage" && "Budget tracking and usage analytics"}
+              {activeTab === "advanced" && "System maintenance and advanced tools"}
             </span>
           </div>
           <button type="button" onClick={onClose} aria-label="Close settings">
@@ -498,6 +507,16 @@ export const SettingsPanel = ({
               <hr className="ba-settings-divider" />
 
               <label className="ba-settings-field">
+                <span>Service Tier</span>
+                <select value={serviceTier} onChange={(event) => setServiceTier(event.target.value as ServiceTier)}>
+                  <option value="default">default (1.0x)</option>
+                  <option value="flex">flex (0.5x)</option>
+                  <option value="priority">priority (2.5x)</option>
+                </select>
+                <small>OpenRouter Service Tier. Flex is cheaper but slower/less reliable; Priority is faster but more expensive.</small>
+              </label>
+
+              <label className="ba-settings-field">
                 <span>Reasoning Effort</span>
                 <select value={reasoningEffort} onChange={(event) => setReasoningEffort(event.target.value as ReasoningEffort)}>
                   <option value="minimal">minimal</option>
@@ -529,6 +548,18 @@ export const SettingsPanel = ({
                   onChange={(event) => setDailyBudgetUsd(event.target.value)}
                 />
               </label>
+              <label className="ba-settings-field">
+                <span>Temporary Daily Budget (USD)</span>
+                <input
+                  type="number"
+                  min={0.01}
+                  step={0.01}
+                  value={temporaryDailyBudgetUsd}
+                  placeholder="Disabled"
+                  onChange={(event) => setTemporaryDailyBudgetUsd(event.target.value)}
+                />
+                <small>Optional. Overrides Daily Budget for today only and clears after the next UTC day starts.</small>
+              </label>
 
               <label className="ba-toggle-field">
                 <input
@@ -557,9 +588,11 @@ export const SettingsPanel = ({
                 disabled={loading}
                 onClick={() =>
                   void onSaveChatSettings({
+                    service_tier: serviceTier,
                     reasoning_effort: reasoningEffort,
                     max_output_tokens: Number(maxOutputTokens),
                     daily_budget_usd: Number(dailyBudgetUsd),
+                    temporary_daily_budget_usd: temporaryDailyBudgetUsd.trim() ? Number(temporaryDailyBudgetUsd) : null,
                     web_search_enabled: webSearchEnabled,
                     web_search_max_results: Number(webSearchMaxResults),
                   })
@@ -654,6 +687,45 @@ export const SettingsPanel = ({
                     )}
                   </tbody>
                 </table>
+              </div>
+            </article>
+          )}
+
+          {activeTab === "advanced" && (
+            <article className="ba-settings-card">
+              <h3>
+                <Settings2 size={16} />
+                Advanced
+              </h3>
+
+              <div className="ba-settings-section">
+                <h4>Usage Statistics Maintenance</h4>
+                <p className="ba-muted-text" style={{ fontSize: "0.85rem", marginBottom: "1rem" }}>
+                  If your usage statistics seem incorrect or out of sync, you can force a recalculation from the database.
+                  This will scan all usage records and update your profile aggregate.
+                </p>
+                <button
+                  type="button"
+                  className="ba-settings-action"
+                  disabled={loading}
+                  onClick={() => {
+                    if (window.confirm("This will scan all your usage records to recalculate the totals. Are you sure?")) {
+                      void onSyncUsage();
+                    }
+                  }}
+                >
+                  Recalculate Usage Statistics
+                </button>
+              </div>
+
+              <hr className="ba-settings-divider" />
+
+              <div className="ba-settings-section">
+                <h4>System Information</h4>
+                <p className="ba-muted-text" style={{ fontSize: "0.85rem" }}>
+                  <strong>Instance ID:</strong> 1 (Single-user mode)<br />
+                  <strong>Schema Version:</strong> {profile?.updated_at ? "v13+" : "unknown"}
+                </p>
               </div>
             </article>
           )}

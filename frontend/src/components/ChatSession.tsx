@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType, MouseEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -174,14 +174,18 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
   const [menuOpenForGroupKey, setMenuOpenForGroupKey] = useState<string | null>(null);
   const [selectedAssistantIndexByGroup, setSelectedAssistantIndexByGroup] = useState<Record<string, number>>({});
   const [quoteSelection, setQuoteSelection] = useState<QuoteSelection | null>(null);
-  const visibleMessages = messages.filter((item) => item.role !== "system");
-  const renderItems = buildRenderItems(visibleMessages);
+  const visibleMessages = useMemo(() => messages.filter((item) => item.role !== "system"), [messages]);
+  const renderItems = useMemo(() => buildRenderItems(visibleMessages), [visibleMessages]);
+  const isAtBottomRef = useRef(true);
+  const lastVisibleCountRef = useRef<number | null>(null);
+  const lastSessionIdRef = useRef<typeof sessionId | null>(null);
+  const lastVisibleMessage = visibleMessages.length > 0 ? visibleMessages[visibleMessages.length - 1] : null;
+  const lastMessageIsAssistant = lastVisibleMessage?.role === "assistant";
   const activeStreamFailure = streamFailure?.session_id === sessionId ? streamFailure : null;
-  const hasStreamingAssistant = streamingMessage.length > 0 || streamingReasoning.length > 0 || Boolean(activeStreamFailure);
+  const hasStreamingAssistant = (streamingMessage.length > 0 || streamingReasoning.length > 0 || Boolean(activeStreamFailure)) && !lastMessageIsAssistant;
   const streamFailureBody = activeStreamFailure
     ? (activeStreamFailure.content.trim() || activeStreamFailure.error)
     : "";
-  const lastVisibleMessage = visibleMessages.length > 0 ? visibleMessages[visibleMessages.length - 1] : null;
   const hasRegenerateInProgress = loadingMessages || sendingMessage || hasStreamingAssistant;
   const activeRecovery = streamRecovery?.session_id === sessionId ? streamRecovery : null;
   const showCenteredRegenerate = !activeRecovery && !hasRegenerateInProgress && !activeStreamFailure && lastVisibleMessage?.role === "user";
@@ -207,8 +211,26 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
         : "The reply may still be generating in the background. You can keep waiting.");
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [visibleMessages.length, streamingMessage, streamingReasoning]);
+    const sessionChanged = sessionId !== lastSessionIdRef.current;
+    lastSessionIdRef.current = sessionId;
+
+    const countChanged = lastVisibleCountRef.current === null || visibleMessages.length !== lastVisibleCountRef.current;
+    lastVisibleCountRef.current = visibleMessages.length;
+
+    if (sessionChanged) {
+      isAtBottomRef.current = true;
+    }
+
+    if (sessionChanged || countChanged) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+
+    const isStreaming = streamingMessage.length > 0 || streamingReasoning.length > 0;
+    if (isStreaming && isAtBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "auto" });
+    }
+  }, [sessionId, visibleMessages.length, streamingMessage, streamingReasoning]);
 
   useEffect(
     () => () => {
@@ -296,7 +318,9 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
       ref={chatlogRef}
       className="ba-chatlog"
       onScroll={(event) => {
-        pendingScrollRef.current = event.currentTarget.scrollTop;
+        const scrollElement = event.currentTarget;
+        pendingScrollRef.current = scrollElement.scrollTop;
+        isAtBottomRef.current = scrollElement.scrollHeight - scrollElement.clientHeight - scrollElement.scrollTop <= 24;
         if (scrollRafRef.current !== null) {
           return;
         }

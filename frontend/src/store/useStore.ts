@@ -9,6 +9,7 @@ import type {
   ModelOption,
   PasskeyInfo,
   ReasoningEffort,
+  ServiceTier,
   Session,
   UsageSummary,
   UserProfile,
@@ -61,6 +62,8 @@ interface Store {
   backendBuildTime: string;
 
   sessions: Session[];
+  sessionsHasMore: boolean;
+  sessionsLoadingMore: boolean;
   sessionId: string | null;
   messages: Message[];
   loadingMessages: boolean;
@@ -104,6 +107,7 @@ interface Store {
   logout: () => void;
 
   refreshSessions: () => Promise<void>;
+  loadMoreSessions: () => Promise<void>;
   selectSession: (sessionId: string) => Promise<void>;
   clearSession: () => void;
   sendMessage: (content: string, attachments?: MessageAttachment[]) => Promise<void>;
@@ -116,6 +120,7 @@ interface Store {
   uploadAvatar: (file: File) => Promise<void>;
 
   refreshUsage: () => Promise<void>;
+  syncUsageAggregate: () => Promise<void>;
   refreshSessionUsage: (sessionId?: string | null) => Promise<void>;
   refreshModels: () => Promise<void>;
   setSelectedModel: (model: string) => Promise<void>;
@@ -156,10 +161,18 @@ const PREVIEW_STREAM_CHUNK_DELAY_MS = 18;
 const SDR_COMPATIBLE_IMAGE_TYPES = ["image/png", "image/webp", "image/jpeg"] as const;
 const DEFAULT_MODEL = "openrouter/auto";
 const ZERO_SESSION_USAGE = { total_tokens: 0, total_cost_usd: 0 };
+export const SERVICE_TIER_MULTIPLIERS: Record<string, number> = {
+  flex: 0.5,
+  default: 1.0,
+  priority: 2.5,
+};
 const DEFAULT_CHAT_SETTINGS: ChatGenerationSettings = {
+  service_tier: "default",
   reasoning_effort: "medium",
   max_output_tokens: 9000,
   daily_budget_usd: 4,
+  temporary_daily_budget_usd: null,
+  temporary_daily_budget_date_utc: null,
   web_search_enabled: false,
   web_search_max_results: 5,
 };
@@ -277,15 +290,38 @@ const normalizeReasoningEffort = (value: unknown): ReasoningEffort => {
   return "medium";
 };
 
+const normalizeTemporaryDailyBudgetUsd = (value: unknown): number | null => {
+  if (value === null || value === undefined || String(value).trim().length === 0) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0.01, parsed) : null;
+};
+
+const isCurrentUtcDate = (value: string | null | undefined): boolean => value === getCurrentUtcDate();
+
+const normalizeServiceTier = (value: unknown): ServiceTier => {
+  if (value === "flex" || value === "default" || value === "priority") {
+    return value;
+  }
+  return "default";
+};
+
 const normalizeChatSettings = (value: Partial<ChatGenerationSettings> | null | undefined): ChatGenerationSettings => {
   const maxOutputTokensRaw = Number(value?.max_output_tokens);
   const maxOutputTokens = Number.isFinite(maxOutputTokensRaw) ? Math.min(64000, Math.max(1, Math.round(maxOutputTokensRaw))) : 9000;
   const maxResultsRaw = Number(value?.web_search_max_results);
   const maxResults = Number.isFinite(maxResultsRaw) ? Math.min(25, Math.max(1, Math.round(maxResultsRaw))) : 5;
+  const temporaryBudget = normalizeTemporaryDailyBudgetUsd(value?.temporary_daily_budget_usd);
+  const temporaryDate = value?.temporary_daily_budget_date_utc ?? (temporaryBudget === null ? null : getCurrentUtcDate());
+  const temporaryBudgetActive = temporaryBudget !== null && isCurrentUtcDate(temporaryDate);
   return {
+    service_tier: normalizeServiceTier(value?.service_tier),
     reasoning_effort: normalizeReasoningEffort(value?.reasoning_effort),
     max_output_tokens: maxOutputTokens,
     daily_budget_usd: Number.isFinite(Number(value?.daily_budget_usd)) ? Math.max(0.01, Number(value?.daily_budget_usd)) : 4,
+    temporary_daily_budget_usd: temporaryBudgetActive ? temporaryBudget : null,
+    temporary_daily_budget_date_utc: temporaryBudgetActive ? temporaryDate : null,
     web_search_enabled: Boolean(value?.web_search_enabled),
     web_search_max_results: maxResults,
   };
@@ -301,10 +337,14 @@ const calcBudgetStatus = (
 ): DailyBudgetStatus => {
   const dateUtc = getCurrentUtcDate();
   const spent = Number(usage?.total_cost_usd ?? 0);
-  const budget = Number(settings.daily_budget_usd ?? 4);
+  const temporaryBudgetActive = settings.temporary_daily_budget_usd !== null;
+  const budget = Number(temporaryBudgetActive ? settings.temporary_daily_budget_usd : (settings.daily_budget_usd ?? 4));
   const remaining = Math.max(0, budget - spent);
   const model = models.find((m) => m.id === selectedModel);
-  const outPrice = model?.pricing?.output_usd_per_million ?? null;
+  const multiplier = SERVICE_TIER_MULTIPLIERS[settings.service_tier] || 1.0;
+  const outPrice = model?.pricing?.output_usd_per_million 
+    ? model.pricing.output_usd_per_million * multiplier
+    : null;
   const available = outPrice && outPrice > 0 ? Math.floor((remaining * 1_000_000 / outPrice) * 0.75) : null;
   return { date_utc: dateUtc, budget_usd: budget, spent_usd: spent, remaining_usd: remaining, selected_model_output_usd_per_million: outPrice, available_output_tokens: available };
 };
@@ -834,6 +874,29 @@ const consumeChatStream = async (
   let lastPersistedSequence = lastSequence;
   let lastPersistedUserMessageId: string | null = null;
 
+  // Buffer state for performance
+  let bufferedContent = "";
+  let bufferedReasoning = "";
+  let needsUpdate = false;
+  let updateFrame: number | null = null;
+
+  const flushUpdates = () => {
+    if (!needsUpdate) return;
+    onMessageDelta(bufferedContent);
+    onReasoningDelta(bufferedReasoning);
+    needsUpdate = false;
+    updateFrame = null;
+  };
+
+  const scheduleUpdate = (content: string, reasoning: string) => {
+    bufferedContent = content;
+    bufferedReasoning = reasoning;
+    needsUpdate = true;
+    if (updateFrame === null) {
+      updateFrame = window.requestAnimationFrame(flushUpdates);
+    }
+  };
+
   while (!terminal) {
     traceClientLog(logLevel, "events.fetch.begin", { session_id: sessionId, job_id: jobId, cursor });
     const controller = new AbortController();
@@ -948,14 +1011,14 @@ const consumeChatStream = async (
           const piece = typeof eventPayload.content_delta === "string" ? eventPayload.content_delta : "";
           if (piece) {
             streamedContent += piece;
-            onMessageDelta(streamedContent);
+            scheduleUpdate(streamedContent, streamedReasoning);
           }
         }
         if (type === "reasoning_delta") {
           const piece = typeof eventPayload.reasoning_delta === "string" ? eventPayload.reasoning_delta : "";
           if (piece) {
             streamedReasoning += piece;
-            onReasoningDelta(streamedReasoning);
+            scheduleUpdate(streamedContent, streamedReasoning);
           }
         }
         if (type === "job_failed") {
@@ -1074,6 +1137,8 @@ export const useStore = create<Store>((set, get) => ({
   backendBuildTime: DEFAULT_BACKEND_BUILD_TIME,
 
   sessions: [],
+  sessionsHasMore: false,
+  sessionsLoadingMore: false,
   sessionId: null,
   messages: [],
   loadingMessages: false,
@@ -1438,11 +1503,39 @@ export const useStore = create<Store>((set, get) => ({
     }
     const token = ensureToken(get().token);
     const includeArchived = get().showArchivedSessions ? "1" : "0";
-    const data = await requestJson<{ sessions: Session[] }>(`/api/sessions?include_archived=${includeArchived}`, {
-      method: "GET",
-      token,
-    });
-    set({ sessions: data.sessions || [] });
+    const data = await requestJson<{ sessions: Session[]; has_more: boolean }>(
+      `/api/sessions?include_archived=${includeArchived}&limit=50&offset=0`,
+      {
+        method: "GET",
+        token,
+      },
+    );
+    set({ sessions: data.sessions || [], sessionsHasMore: Boolean(data.has_more) });
+  },
+
+  loadMoreSessions: async () => {
+    if (get().previewMode || !get().sessionsHasMore || get().sessionsLoadingMore) {
+      return;
+    }
+    set({ sessionsLoadingMore: true });
+    try {
+      const token = ensureToken(get().token);
+      const includeArchived = get().showArchivedSessions ? "1" : "0";
+      const offset = get().sessions.length;
+      const data = await requestJson<{ sessions: Session[]; has_more: boolean }>(
+        `/api/sessions?include_archived=${includeArchived}&limit=50&offset=${offset}`,
+        {
+          method: "GET",
+          token,
+        },
+      );
+      set((state) => ({
+        sessions: [...state.sessions, ...(data.sessions || [])],
+        sessionsHasMore: Boolean(data.has_more),
+      }));
+    } finally {
+      set({ sessionsLoadingMore: false });
+    }
   },
 
   selectSession: async (sessionId) => {
@@ -1473,7 +1566,8 @@ export const useStore = create<Store>((set, get) => ({
       const currentMessages = await fetchSessionMessages(token, sessionId);
       set({ messages: currentMessages });
       try {
-        await get().refreshSessionUsage(sessionId);
+      await get().refreshUsage();
+      await get().refreshSessionUsage(sessionId);
       } catch {
         set({ sessionUsage: ZERO_SESSION_USAGE });
       }
@@ -1517,7 +1611,8 @@ export const useStore = create<Store>((set, get) => ({
               ),
             });
             await get().refreshSessions();
-            await get().refreshSessionUsage(sessionId);
+      await get().refreshUsage();
+      await get().refreshSessionUsage(sessionId);
             return;
           }
           if (streamResult.warning) {
@@ -1552,7 +1647,8 @@ export const useStore = create<Store>((set, get) => ({
               streamRecovery: null,
             });
             await get().refreshSessions();
-            await get().refreshSessionUsage(sessionId);
+      await get().refreshUsage();
+      await get().refreshSessionUsage(sessionId);
           }
         } catch (resumeError) {
           persistInflightStream(sessionId, {
@@ -1617,10 +1713,11 @@ export const useStore = create<Store>((set, get) => ({
         }
 
         const recoveryUserMessageId = inflight?.user_message_id ?? recentUserMessage?.id ?? null;
+        const hasRecoveryJob = Boolean(inflight?.job_id);
         const recoveryCreatedAt = resolveRecoveryUserMessageCreatedAt(currentMessages, recoveryUserMessageId)
           ?? (inflight ? Number(inflight.created_at) : null)
           ?? (recentUserMessage ? Number(recentUserMessage.created_at) : null);
-        if (recoveryUserMessageId) {
+        if (hasRecoveryJob && recoveryUserMessageId) {
           set({
             streamRecovery: buildDisconnectedRecoveryState(
               sessionId,
@@ -1827,8 +1924,8 @@ export const useStore = create<Store>((set, get) => ({
         if (newSession) {
           await get().refreshSessions();
         }
-        await get().refreshUsage();
-        await get().refreshSessionUsage(sessionId);
+      await get().refreshUsage();
+      await get().refreshSessionUsage(sessionId);
         return;
       }
 
@@ -1859,6 +1956,7 @@ export const useStore = create<Store>((set, get) => ({
         streamingMessage: "",
         streamingReasoning: "",
         streamFailure: null,
+        sendingMessage: false, // Set sendingMessage to false atomically with messages update
       }));
 
       if (newSession) {
@@ -1866,6 +1964,7 @@ export const useStore = create<Store>((set, get) => ({
       }
       await get().refreshUsage();
       await get().refreshSessionUsage(sessionId);
+
       warnBudget(get());
       if (streamResult.warning) {
         get().pushToast(streamResult.warning, "info");
@@ -1873,10 +1972,10 @@ export const useStore = create<Store>((set, get) => ({
     } catch (error) {
       persistInflightStream(sessionId, null);
       get().pushToast(getErrorMessage(error), "error");
-      set({ streamingMessage: "", streamingReasoning: "", streamFailure: null, streamRecovery: null });
+      set({ streamingMessage: "", streamingReasoning: "", streamFailure: null, streamRecovery: null, sendingMessage: false });
       throw error;
     } finally {
-      set({ sendingMessage: false });
+      // sendingMessage is now handled in successful set or catch set
     }
   },
 
@@ -2057,8 +2156,9 @@ export const useStore = create<Store>((set, get) => ({
             streamResult.reasoning,
           ),
         }));
-        await get().refreshUsage();
-        await get().refreshSessionUsage(sessionId);
+      await get().refreshUsage();
+      await get().refreshSessionUsage(sessionId);
+
         return;
       }
 
@@ -2336,6 +2436,24 @@ export const useStore = create<Store>((set, get) => ({
       all_error: allData.status === "rejected" ? allData.reason : null,
       daily_error: dailyData.status === "rejected" ? dailyData.reason : null,
     });
+  },
+
+  syncUsageAggregate: async () => {
+    if (get().previewMode) {
+      return;
+    }
+    const token = ensureToken(get().token);
+    try {
+      const data = await requestJson<{ profile: UserProfile }>("/api/settings/usage/sync", {
+        method: "PUT",
+        token,
+      });
+      set({ profile: data.profile });
+      await get().refreshUsage();
+      get().pushToast("Usage statistics recalculated and synchronized.", "success");
+    } catch (error) {
+      get().pushToast(`Sync failed: ${getErrorMessage(error)}`, "error");
+    }
   },
 
   refreshSessionUsage: async (sessionId) => {
@@ -2667,8 +2785,8 @@ export const useStore = create<Store>((set, get) => ({
     set((state) => ({
       sessions: state.sessions.map((s) => (s.id === sessionId ? { ...s, title: data.title || s.title } : s)),
     }));
-    await get().refreshUsage();
     if (get().sessionId === sessionId) {
+      await get().refreshUsage();
       await get().refreshSessionUsage(sessionId);
     }
   },

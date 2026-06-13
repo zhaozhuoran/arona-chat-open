@@ -63,15 +63,25 @@ export interface UserProfile {
   send_shortcut: "ctrl_enter" | "enter";
   conversation_library_enabled: boolean;
   updated_at: number;
+  total_requests?: number;
+  total_prompt_tokens?: number;
+  total_completion_tokens?: number;
+  total_tokens?: number;
+  total_cost_usd?: number;
+  by_model?: UsageModelBreakdown[];
 }
 
 export type ReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
 export type LogLevel = "INFO" | "TRACE";
+export type ServiceTier = "flex" | "default" | "priority";
 
 export interface ChatGenerationSettings {
+  service_tier: ServiceTier;
   reasoning_effort: ReasoningEffort;
   max_output_tokens: number;
   daily_budget_usd: number;
+  temporary_daily_budget_usd: number | null;
+  temporary_daily_budget_date_utc: string | null;
   web_search_enabled: boolean;
   web_search_max_results: number;
 }

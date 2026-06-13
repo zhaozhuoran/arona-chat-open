@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { FormEvent, UIEvent } from "react";
 import type { CSSProperties } from "react";
 import { FolderOpen, Menu, MessageSquarePlus, MoreHorizontal, Pin, Settings2, X } from "lucide-react";
 import { AttachmentLibraryPanel } from "./components/AttachmentLibraryPanel";
@@ -25,6 +25,10 @@ const formatBottomCurrency = (value: number): string =>
   `$${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const TOPBAR_INTERACTION_HIDE_THRESHOLD = 0.98;
 const CHAT_NEW_PATH = "/chat/new";
+const SESSION_LIST_ITEM_HEIGHT = 42;
+const SESSION_LIST_ITEM_GAP = 8;
+const SESSION_LIST_ITEM_STRIDE = SESSION_LIST_ITEM_HEIGHT + SESSION_LIST_ITEM_GAP;
+const SESSION_LIST_OVERSCAN = 6;
 
 const parseChatRoute = (pathname: string): ChatRoute | null => {
   const normalized = pathname.replace(/\/+$/, "") || "/";
@@ -57,6 +61,10 @@ function App() {
   const [renameTitleInput, setRenameTitleInput] = useState("");
   const [transitionState, setTransitionState] = useState<TransitionState>("idle");
   const [chatScrollY, setChatScrollY] = useState(0);
+  const [sessionListMetrics, setSessionListMetrics] = useState({ height: 0, scrollTop: 0 });
+  const sessionListRef = useRef<HTMLDivElement | null>(null);
+  const sessionListScrollTopRef = useRef(0);
+  const sessionListScrollFrameRef = useRef<number | null>(null);
   const hasPlayedEntryAnimation = useRef(false);
   const transitionTimers = useRef<number[]>([]);
   const usageUpdateTimerRef = useRef<number | null>(null);
@@ -71,6 +79,8 @@ function App() {
     backendBuildHash,
     backendBuildTime,
     sessions,
+    sessionsHasMore,
+    sessionsLoadingMore,
     sessionId,
     profile,
     usage,
@@ -100,12 +110,14 @@ function App() {
     loginWithPasskey,
     loginWithPreviewPassword,
     logout,
+    loadMoreSessions,
     selectSession,
     clearSession,
     refreshProfile,
     updateProfile,
     uploadAvatar,
     refreshUsage,
+    syncUsageAggregate,
     refreshModels,
     setSelectedModel,
     setTitleModel,
@@ -140,6 +152,10 @@ function App() {
     backendBuildHash: state.backendBuildHash,
     backendBuildTime: state.backendBuildTime,
     sessions: state.sessions,
+    sessionsHasMore: state.sessionsHasMore,
+    sessionsLoadingMore: state.sessionsLoadingMore,
+    loadMoreSessions: state.loadMoreSessions,
+    syncUsageAggregate: state.syncUsageAggregate,
     sessionId: state.sessionId,
     profile: state.profile,
     usage: state.usage,
@@ -206,6 +222,69 @@ function App() {
   useEffect(() => {
     void initialize();
   }, [initialize]);
+
+  useEffect(() => {
+    const sessionList = sessionListRef.current;
+    if (!sessionList) {
+      return;
+    }
+
+    const updateHeight = () => {
+      setSessionListMetrics((current) => ({
+        ...current,
+        height: sessionList.clientHeight,
+        scrollTop: sessionList.scrollTop,
+      }));
+    };
+
+    updateHeight();
+
+    const resizeObserver = new ResizeObserver(updateHeight);
+    resizeObserver.observe(sessionList);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [authenticated, sidebarOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (sessionListScrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(sessionListScrollFrameRef.current);
+      }
+    };
+  }, []);
+
+  const handleSessionListScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
+    sessionListScrollTopRef.current = event.currentTarget.scrollTop;
+    if (sessionListScrollFrameRef.current !== null) {
+      return;
+    }
+
+    sessionListScrollFrameRef.current = window.requestAnimationFrame(() => {
+      sessionListScrollFrameRef.current = null;
+      const nextScrollTop = sessionListScrollTopRef.current;
+      setSessionListMetrics((current) => (
+        current.scrollTop === nextScrollTop ? current : { ...current, scrollTop: nextScrollTop }
+      ));
+    });
+  }, []);
+
+  const virtualSessionList = useMemo(() => {
+    const totalHeight = sessions.length === 0
+      ? 0
+      : sessions.length * SESSION_LIST_ITEM_STRIDE - SESSION_LIST_ITEM_GAP;
+    const viewportHeight = sessionListMetrics.height || SESSION_LIST_ITEM_STRIDE * 12;
+    const startIndex = Math.max(0, Math.floor(sessionListMetrics.scrollTop / SESSION_LIST_ITEM_STRIDE) - SESSION_LIST_OVERSCAN);
+    const visibleCount = Math.ceil(viewportHeight / SESSION_LIST_ITEM_STRIDE) + SESSION_LIST_OVERSCAN * 2;
+    const endIndex = Math.min(sessions.length, startIndex + visibleCount);
+
+    return {
+      items: sessions.slice(startIndex, endIndex),
+      offsetY: startIndex * SESSION_LIST_ITEM_STRIDE,
+      totalHeight,
+    };
+  }, [sessionListMetrics.height, sessionListMetrics.scrollTop, sessions]);
 
   const syncRouteToState = useCallback(async () => {
     const route = parseChatRoute(window.location.pathname);
@@ -512,89 +591,105 @@ function App() {
           </button>
         </div>
 
-        <div className="ba-session-list">
-          {sessions.map((session) => (
-            <div key={session.id} className={`ba-session-item ${session.id === sessionId ? "is-active" : ""}`}>
-              <button
-                type="button"
-                className="ba-session-item-main"
-                onClick={() => {
-                  setMenuSessionId(null);
-                  void selectSession(session.id);
-                  if (window.matchMedia("(max-width: 1079px)").matches) {
-                    setSidebarOpen(false);
-                  }
-                }}
-              >
-                <p>{session.title || "Untitled session"}</p>
-                {session.pinned_at ? <Pin size={12} className="ba-session-pin" aria-hidden="true" /> : null}
-              </button>
-              <button
-                type="button"
-                className="ba-session-menu-trigger"
-                aria-label="Session actions"
-                aria-expanded={menuSessionId === session.id}
-                aria-controls={`session-menu-${session.id}`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setMenuSessionId((current) => (current === session.id ? null : session.id));
-                }}
-              >
-                <MoreHorizontal size={14} />
-              </button>
-              {menuSessionId === session.id ? (
-                <div
-                  id={`session-menu-${session.id}`}
-                  aria-label={`Actions for ${session.title || "Untitled session"}`}
-                  className="ba-session-menu"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMenuSessionId(null);
-                      void autoGenerateSessionTitle(session.id).catch((error) => {
-                        pushToast(error instanceof Error ? error.message : "Failed to auto-generate title.", "error");
-                      });
-                    }}
-                  >
-                    Auto-generate title
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMenuSessionId(null);
-                      const currentTitle = (session.title || "").trim();
-                      setRenameSessionTarget({ id: session.id, title: currentTitle });
-                      setRenameTitleInput(currentTitle || "New conversation");
-                    }}
-                  >
-                    Rename conversation
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMenuSessionId(null);
-                      void pinSession(session.id, !session.pinned_at);
-                    }}
-                  >
-                    {session.pinned_at ? "Unpin conversation" : "Pin conversation"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMenuSessionId(null);
-                      void archiveSession(session.id, !session.archived_at);
-                    }}
-                  >
-                    {session.archived_at ? "Unarchive conversation" : "Archive conversation"}
-                  </button>
+        <div ref={sessionListRef} className="ba-session-list" onScroll={handleSessionListScroll}>
+          {sessions.length > 0 ? (
+            <>
+              <div className="ba-session-list-spacer" style={{ height: virtualSessionList.totalHeight }}>
+                <div className="ba-session-list-window" style={{ transform: `translateY(${virtualSessionList.offsetY}px)` }}>
+                  {virtualSessionList.items.map((session) => (
+                    <div key={session.id} className={`ba-session-item ${session.id === sessionId ? "is-active" : ""}`}>
+                      <button
+                        type="button"
+                        className="ba-session-item-main"
+                        onClick={() => {
+                          setMenuSessionId(null);
+                          void selectSession(session.id);
+                          if (window.matchMedia("(max-width: 1079px)").matches) {
+                            setSidebarOpen(false);
+                          }
+                        }}
+                      >
+                        <p>{session.title || "Untitled session"}</p>
+                        {session.pinned_at ? <Pin size={12} className="ba-session-pin" aria-hidden="true" /> : null}
+                      </button>
+                      <button
+                        type="button"
+                        className="ba-session-menu-trigger"
+                        aria-label="Session actions"
+                        aria-expanded={menuSessionId === session.id}
+                        aria-controls={`session-menu-${session.id}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setMenuSessionId((current) => (current === session.id ? null : session.id));
+                        }}
+                      >
+                        <MoreHorizontal size={14} />
+                      </button>
+                      {menuSessionId === session.id ? (
+                        <div
+                          id={`session-menu-${session.id}`}
+                          aria-label={`Actions for ${session.title || "Untitled session"}`}
+                          className="ba-session-menu"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMenuSessionId(null);
+                              void autoGenerateSessionTitle(session.id).catch((error) => {
+                                pushToast(error instanceof Error ? error.message : "Failed to auto-generate title.", "error");
+                              });
+                            }}
+                          >
+                            Auto-generate title
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMenuSessionId(null);
+                              const currentTitle = (session.title || "").trim();
+                              setRenameSessionTarget({ id: session.id, title: currentTitle });
+                              setRenameTitleInput(currentTitle || "New conversation");
+                            }}
+                          >
+                            Rename conversation
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMenuSessionId(null);
+                              void pinSession(session.id, !session.pinned_at);
+                            }}
+                          >
+                            {session.pinned_at ? "Unpin conversation" : "Pin conversation"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMenuSessionId(null);
+                              void archiveSession(session.id, !session.archived_at);
+                            }}
+                          >
+                            {session.archived_at ? "Unarchive conversation" : "Archive conversation"}
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
                 </div>
-              ) : null}
-            </div>
-          ))}
-
-          {sessions.length === 0 && (
+              </div>
+              {sessionsHasMore && (
+                <button
+                  type="button"
+                  className="ba-session-list-more"
+                  disabled={sessionsLoadingMore}
+                  onClick={() => void loadMoreSessions()}
+                >
+                  {sessionsLoadingMore ? "Loading..." : "Load More"}
+                </button>
+              )}
+            </>
+          ) : (
             <button type="button" className="ba-session-item is-empty" onClick={triggerNewSession}>
               <p>Create your first chat</p>
             </button>
@@ -770,7 +865,9 @@ function App() {
             pushToast(error instanceof Error ? error.message : "Failed to activate workspace.", "error");
           }
         }}
+        onSyncUsage={syncUsageAggregate}
         onRegisterPasskey={async (nickname) => {
+
           try {
             await registerPasskey(nickname);
           } catch (error) {
