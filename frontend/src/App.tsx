@@ -286,6 +286,30 @@ function App() {
     };
   }, [sessionListMetrics.height, sessionListMetrics.scrollTop, sessions]);
 
+  const handlePasswordLogin = useCallback(
+    async (password: string) => {
+      const previewPassword = import.meta.env.VITE_PREVIEW_PASSWORD?.trim();
+      if (previewPassword && password.trim() === previewPassword) {
+        loginWithPreviewPassword();
+        return;
+      }
+      try {
+        await loginWithPassword(password);
+      } catch {
+        // store already exposes notification
+      }
+    },
+    [loginWithPassword, loginWithPreviewPassword],
+  );
+
+  const handlePasskeyLogin = useCallback(async () => {
+    try {
+      await loginWithPasskey();
+    } catch {
+      // store already exposes notification
+    }
+  }, [loginWithPasskey]);
+
   const syncRouteToState = useCallback(async () => {
     const route = parseChatRoute(window.location.pathname);
     if (!route || route.kind === "new") {
@@ -302,6 +326,23 @@ function App() {
       window.history.replaceState(null, "", CHAT_NEW_PATH);
     }
   }, [clearSession, selectSession]);
+
+  useEffect(() => {
+    if (!authReady || authenticated) {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const autologin = params.get("autologin");
+    const password = params.get("password");
+    if (autologin === "1" && password) {
+      void handlePasswordLogin(password);
+      params.delete("autologin");
+      params.delete("password");
+      const nextSearch = params.toString();
+      const nextPath = window.location.pathname + (nextSearch ? `?${nextSearch}` : "");
+      window.history.replaceState(null, "", nextPath);
+    }
+  }, [authReady, authenticated, handlePasswordLogin]);
 
   useEffect(() => {
     if (!authReady || !authenticated) {
@@ -469,26 +510,6 @@ function App() {
     }
   };
 
-  const handlePasswordLogin = async (password: string) => {
-    const previewPassword = import.meta.env.VITE_PREVIEW_PASSWORD?.trim();
-    if (previewPassword && password.trim() === previewPassword) {
-      loginWithPreviewPassword();
-      return;
-    }
-    try {
-      await loginWithPassword(password);
-    } catch {
-      // store already exposes notification
-    }
-  };
-
-  const handlePasskeyLogin = async () => {
-    try {
-      await loginWithPasskey();
-    } catch {
-      // store already exposes notification
-    }
-  };
 
   const handleBootComplete = useCallback(() => {
     setBootComplete(true);
