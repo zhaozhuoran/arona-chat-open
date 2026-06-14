@@ -4,6 +4,7 @@
 
 ![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)
 ![Status](https://img.shields.io/badge/Status-Public--Mirror-orange.svg)
+[![Demo](https://img.shields.io/badge/Demo-Live%20Preview-green.svg)](https://arona-chat-open.pages.dev/login?password=preview&autologin=1)
 
 Arona Chat 是一款灵感源自《蔚蓝档案》（Blue Archive）“什亭之匣”（Shittim Chest）UI 的高性能 AI 聊天界面。项目采用 Monorepo 架构，利用 Cloudflare 无服务器生态系统（Workers, D1, R2, Durable Objects），实现了高性价比且具备状态持久化的聊天体验。
 
@@ -30,7 +31,11 @@ graph TD
 
 ## 截图
 
-![demo](assests/screenshots/screenshot-1.png)
+![Arona Chat Interface](assests/screenshots/screenshot-1.png)
+
+![Arona Chat Cost Tracking](assests/screenshots/screenshot-2.png)
+
+![Arona Chat Attachment Management](assests/screenshots/screenshot-3.png)
 
 ## 技术亮点
 

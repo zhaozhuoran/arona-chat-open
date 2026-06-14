@@ -4,6 +4,7 @@ English | [简体中文](README-cn.md)
 
 ![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)
 ![Status](https://img.shields.io/badge/Status-Public--Mirror-orange.svg)
+[![Demo](https://img.shields.io/badge/Demo-Live%20Preview-green.svg)](https://arona-chat-open.pages.dev/login?password=preview&autologin=1)
 
 Arona Chat is a high-performance AI chat interface inspired by the _Blue Archive_ "Shittim Chest" UI. Built as a monorepo, it leverages the Cloudflare serverless ecosystem (Workers, D1, R2, Durable Objects) to deliver a cost-efficient, stateful chat experience.
 
@@ -30,7 +31,11 @@ graph TD
 
 ## Screenshots
 
-![demo](assests/screenshots/screenshot-1.png)
+![Arona Chat Interface](assests/screenshots/screenshot-1.png)
+
+![Arona Chat Cost Tracking](assests/screenshots/screenshot-2.png)
+
+![Arona Chat Attachment Management](assests/screenshots/screenshot-3.png)
 
 ## Key Technical Highlights
 
