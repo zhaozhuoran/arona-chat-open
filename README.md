@@ -8,6 +8,8 @@ English | [简体中文](README-cn.md)
 
 Arona Chat is a high-performance AI chat interface inspired by the _Blue Archive_ "Shittim Chest" UI. Built as a monorepo, it leverages the Cloudflare serverless ecosystem (Workers, D1, R2, Durable Objects) to deliver a cost-efficient, stateful chat experience.
 
+👉 Live Demo: https://arona-chat-open.pages.dev/login?password=preview&autologin=1
+
 ---
 
 ## Architecture Overview
