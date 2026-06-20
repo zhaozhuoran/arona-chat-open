@@ -81,7 +81,11 @@ Before running the project locally, ensure you have the following installed:
 
 _See `package.json` for all available scripts._
 
----
+## 🌟 Project Origin
+
+This project was developed as part of Hack Club Stardance.
+
+Project page: https://stardance.hackclub.com/projects/17862
 
 ## Repository Status
 
