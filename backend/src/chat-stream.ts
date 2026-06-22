@@ -84,6 +84,9 @@ import {
   applySchemaV10,
   applySchemaV11,
   applySchemaV12,
+  applySchemaV13,
+  applySchemaV14,
+  applySchemaV15,
   ensureDatabaseReady,
   SerializedError,
   serializeError,
@@ -237,6 +240,7 @@ export const CHAT_STREAM_RETENTION_MAX_EVENTS = 3000;
 export const CHAT_STREAM_RETENTION_MAX_TERMINAL_JOBS = 128;
 export const CHAT_STREAM_KEEPALIVE_INTERVAL_MS = 15_000;
 export const CHAT_STREAM_POLL_INTERVAL_MS = 1_000;
+export const CHAT_STREAM_UPSTREAM_TIMEOUT_MS = 100_000;
 
 export type ChatStreamMeta = {
   next_sequence: number;

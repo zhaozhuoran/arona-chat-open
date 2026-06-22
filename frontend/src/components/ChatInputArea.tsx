@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import type { ChangeEvent, ClipboardEvent, DragEvent, FormEvent, KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { FileText, FolderOpen, LoaderCircle, Paperclip, RefreshCw, Send, X } from "lucide-react";
@@ -28,7 +29,7 @@ export const ChatInputArea = () => {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const { sendingMessage, sendMessage, uploadAttachment, pushToast, sendShortcut, conversationLibraryEnabled, libraryItems, libraryLoading, refreshLibrary } =
-    useStore((state) => ({
+    useStore(useShallow((state) => ({
       sendingMessage: state.sendingMessage,
       sendMessage: state.sendMessage,
       uploadAttachment: state.uploadAttachment,
@@ -38,7 +39,7 @@ export const ChatInputArea = () => {
       libraryItems: state.libraryItems,
       libraryLoading: state.libraryLoading,
       refreshLibrary: state.refreshLibrary,
-    }));
+    })));
 
   const hasUploadingAttachment = composerAttachments.some((item) => item.status === "uploading");
   const readyAttachments = composerAttachments.filter((item) => item.status === "ready");

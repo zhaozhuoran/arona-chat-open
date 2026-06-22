@@ -84,6 +84,8 @@ import {
   applySchemaV11,
   applySchemaV12,
   applySchemaV13,
+  applySchemaV14,
+  applySchemaV15,
   ensureDatabaseReady,
   SerializedError,
   serializeError,

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import type { FormEvent, UIEvent } from "react";
 import type { CSSProperties } from "react";
 import { FolderOpen, Menu, MessageSquarePlus, MoreHorizontal, Pin, Settings2, X } from "lucide-react";
@@ -144,7 +145,7 @@ function App() {
     removePasskey,
     dismissToast,
     pushToast,
-  } = useStore((state) => ({
+  } = useStore(useShallow((state) => ({
     authReady: state.authReady,
     authLoading: state.authLoading,
     authenticated: state.authenticated,
@@ -217,7 +218,7 @@ function App() {
     removePasskey: state.removePasskey,
     dismissToast: state.dismissToast,
     pushToast: state.pushToast,
-  }));
+  })));
 
   useEffect(() => {
     void initialize();

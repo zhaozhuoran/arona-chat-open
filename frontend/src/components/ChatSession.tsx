@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, memo } from "react";
+import { useShallow } from "zustand/react/shallow";
 import type { ComponentType, MouseEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -15,6 +16,9 @@ const Markdown = ReactMarkdown as unknown as ComponentType<{
   remarkPlugins?: unknown[];
   rehypePlugins?: unknown[];
 }>;
+
+const REMARK_PLUGINS = [remarkGfm, remarkMath];
+const REHYPE_PLUGINS = [rehypeKatex];
 
 const normalizeMessageMarkdown = (content: string): string =>
   content
@@ -135,6 +139,167 @@ const isSelectionWithinTarget = (selection: Selection, target: HTMLElement): boo
   return Boolean(anchorNode && focusNode && target.contains(anchorNode) && target.contains(focusNode));
 };
 
+type UserMessageRowProps = {
+  message: Message;
+  username: string;
+};
+
+const UserMessageRow = memo(({ message, username }: UserMessageRowProps) => {
+  const messageTime = formatMessageTime(message.created_at);
+  return (
+    <div className="ba-message-row is-user">
+      <div className="ba-message is-user">
+        <div className="ba-message-head">
+          <div className="ba-message-label">{username}</div>
+          {messageTime && <div className="ba-message-time">{messageTime}</div>}
+        </div>
+        {message.reasoning_summary && (
+          <details className="ba-message-reasoning">
+            <summary>Deep Thinking</summary>
+            <pre>{message.reasoning_summary}</pre>
+          </details>
+        )}
+        <MessageAttachments attachments={message.attachments ?? []} />
+        <div className="ba-markdown">
+          <Markdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS}>
+            {normalizeMessageMarkdown(message.content)}
+          </Markdown>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+type AssistantMessageRowProps = {
+  group: AssistantGroup;
+  selectedIndex: number;
+  menuOpen: boolean;
+  canRegenerate: boolean;
+  isQuoteSelected: boolean;
+  onRegenerate: (groupKey: string, count: number) => void;
+  onSetMenuOpen: (groupKey: string | null) => void;
+  onSetSelectedIndex: (groupKey: string, index: number) => void;
+  onCaptureSelection: (event: MouseEvent<HTMLDivElement>, messageId: string) => void;
+  onApplyQuoteSelection: () => void;
+  onCopyText: (content: string) => void;
+};
+
+const AssistantMessageRow = memo(
+  ({
+    group,
+    selectedIndex,
+    menuOpen,
+    canRegenerate,
+    isQuoteSelected,
+    onRegenerate,
+    onSetMenuOpen,
+    onSetSelectedIndex,
+    onCaptureSelection,
+    onApplyQuoteSelection,
+    onCopyText,
+  }: AssistantMessageRowProps) => {
+    const message = group.messages[selectedIndex];
+    const messageTime = formatMessageTime(message.created_at);
+    const canSwitchVersion = group.messages.length > 1;
+
+    return (
+      <div className="ba-message-row is-assistant">
+        <img className="ba-message-avatar" src={ARONA_AVATAR_SRC} alt="Arona" />
+        <div className="ba-message is-assistant">
+          <div className="ba-message-head">
+            <div className="ba-message-label">Arona</div>
+            {messageTime && <div className="ba-message-time">{messageTime}</div>}
+          </div>
+          {message.reasoning_summary && (
+            <details className="ba-message-reasoning">
+              <summary>Deep Thinking</summary>
+              <pre>{message.reasoning_summary}</pre>
+            </details>
+          )}
+          <MessageAttachments attachments={message.attachments ?? []} />
+          <div className="ba-markdown" onMouseUp={(event) => onCaptureSelection(event, message.id)}>
+            <Markdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS}>
+              {normalizeMessageMarkdown(message.content)}
+            </Markdown>
+          </div>
+          <div className="ba-message-actions">
+            {isQuoteSelected ? (
+              <button type="button" className="ba-message-action-secondary" onClick={onApplyQuoteSelection}>
+                Quote Selection
+              </button>
+            ) : null}
+            {canSwitchVersion ? (
+              <span
+                className="ba-message-version-indicator"
+                aria-label={`Current version ${selectedIndex + 1} of ${group.messages.length} available versions`}
+                title={`Version ${selectedIndex + 1} of ${group.messages.length}`}
+              >
+                Version {selectedIndex + 1}/{group.messages.length}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              className="ba-message-action-trigger"
+              aria-label="Message actions"
+              aria-expanded={menuOpen}
+              aria-controls={`message-menu-${group.groupKey}`}
+              onClick={() => onSetMenuOpen(menuOpen ? null : group.groupKey)}
+            >
+              <MoreHorizontal size={16} />
+            </button>
+            {menuOpen ? (
+              <div id={`message-menu-${group.groupKey}`} className="ba-message-menu">
+                <button type="button" onClick={() => onCopyText(message.content)}>
+                  Copy Text
+                </button>
+                {canRegenerate ? (
+                  <button type="button" onClick={() => onRegenerate(group.groupKey, group.messages.length)}>
+                    Regenerate Message
+                  </button>
+                ) : null}
+                {canSwitchVersion ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={selectedIndex <= 0}
+                      onClick={() => {
+                        onSetMenuOpen(null);
+                        onSetSelectedIndex(group.groupKey, Math.max(0, selectedIndex - 1));
+                      }}
+                    >
+                      Previous Version
+                    </button>
+                    <button
+                      type="button"
+                      disabled={selectedIndex >= group.messages.length - 1}
+                      onClick={() => {
+                        onSetMenuOpen(null);
+                        onSetSelectedIndex(group.groupKey, Math.min(group.messages.length - 1, selectedIndex + 1));
+                      }}
+                    >
+                      Next Version
+                    </button>
+                    <button
+                      type="button"
+                      disabled={selectedIndex >= group.messages.length - 1}
+                      onClick={() => {
+                        onSetMenuOpen(null);
+                        onSetSelectedIndex(group.groupKey, group.messages.length - 1);
+                      }}
+                    >
+                      Latest Version
+                    </button>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  },
+);
+
 export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
   const {
     sessionId,
@@ -150,7 +315,7 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
     reconnectStream,
     waitForStreamCompletion,
     pushToast,
-  } = useStore((state) => ({
+  } = useStore(useShallow((state) => ({
     sessionId: state.sessionId,
     messages: state.messages,
     streamingMessage: state.streamingMessage,
@@ -164,7 +329,7 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
     reconnectStream: state.reconnectStream,
     waitForStreamCompletion: state.waitForStreamCompletion,
     pushToast: state.pushToast,
-  }));
+  })));
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const chatlogRef = useRef<HTMLDivElement>(null);
@@ -349,28 +514,12 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
 
       {renderItems.map((item) => {
         if (item.kind === "user") {
-          const messageTime = formatMessageTime(item.message.created_at);
           return (
-            <div key={item.message.id} className="ba-message-row is-user">
-              <div className="ba-message is-user">
-                <div className="ba-message-head">
-                  <div className="ba-message-label">{profile?.username || "You"}</div>
-                  {messageTime && <div className="ba-message-time">{messageTime}</div>}
-                </div>
-                {item.message.reasoning_summary && (
-                  <details className="ba-message-reasoning">
-                    <summary>Deep Thinking</summary>
-                    <pre>{item.message.reasoning_summary}</pre>
-                  </details>
-                )}
-                <MessageAttachments attachments={item.message.attachments ?? []} />
-                <div className="ba-markdown">
-                  <Markdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-                    {normalizeMessageMarkdown(item.message.content)}
-                  </Markdown>
-                </div>
-              </div>
-            </div>
+            <UserMessageRow
+              key={item.message.id}
+              message={item.message}
+              username={profile?.username || "You"}
+            />
           );
         }
 
@@ -378,128 +527,38 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
         const selectedIndexRaw = selectedAssistantIndexByGroup[group.groupKey];
         const selectedIndex = clampVersionIndex(selectedIndexRaw, group.messages.length - 1);
         const message = group.messages[selectedIndex];
-        const messageTime = formatMessageTime(message.created_at);
-        const canRegenerateFromAssistant = !hasRegenerateInProgress && latestAssistantGroupKey === group.groupKey;
-        const canSwitchVersion = group.messages.length > 1;
-        const isQuoteSelectedForCurrent = quoteSelection?.messageId === message.id;
 
         return (
-          <div key={group.groupKey} className="ba-message-row is-assistant">
-            <img className="ba-message-avatar" src={ARONA_AVATAR_SRC} alt="Arona" />
-            <div className="ba-message is-assistant">
-              <div className="ba-message-head">
-                <div className="ba-message-label">Arona</div>
-                {messageTime && <div className="ba-message-time">{messageTime}</div>}
-              </div>
-              {message.reasoning_summary && (
-                <details className="ba-message-reasoning">
-                  <summary>Deep Thinking</summary>
-                  <pre>{message.reasoning_summary}</pre>
-                </details>
-              )}
-              <MessageAttachments attachments={message.attachments ?? []} />
-              <div className="ba-markdown" onMouseUp={(event) => captureAssistantSelection(event, message.id)}>
-                <Markdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-                  {normalizeMessageMarkdown(message.content)}
-                </Markdown>
-              </div>
-              <div className="ba-message-actions">
-                {isQuoteSelectedForCurrent ? (
-                  <button type="button" className="ba-message-action-secondary" onClick={applyQuoteSelection}>
-                    Quote Selection
-                  </button>
-                ) : null}
-                {canSwitchVersion ? (
-                  <span
-                    className="ba-message-version-indicator"
-                    aria-label={`Current version ${selectedIndex + 1} of ${group.messages.length} available versions`}
-                    title={`Version ${selectedIndex + 1} of ${group.messages.length}`}
-                  >
-                    Version {selectedIndex + 1}/{group.messages.length}
-                  </span>
-                ) : null}
-                <button
-                  type="button"
-                  className="ba-message-action-trigger"
-                  aria-label="Message actions"
-                  aria-expanded={menuOpenForGroupKey === group.groupKey}
-                  aria-controls={`message-menu-${group.groupKey}`}
-                  onClick={() => setMenuOpenForGroupKey((current) => (current === group.groupKey ? null : group.groupKey))}
-                >
-                  <MoreHorizontal size={16} />
-                </button>
-                {menuOpenForGroupKey === group.groupKey ? (
-                  <div id={`message-menu-${group.groupKey}`} className="ba-message-menu">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        try {
-                          void navigator.clipboard.writeText(message.content).then(() => {
-                            setMenuOpenForGroupKey(null);
-                            pushToast("Copied!", "success");
-                          }).catch(() => {
-                            pushToast("Failed to copy text.", "error");
-                          });
-                        } catch {
-                          pushToast("Failed to copy text.", "error");
-                        }
-                      }}
-                    >
-                      Copy Text
-                    </button>
-                    {canRegenerateFromAssistant ? (
-                      <button type="button" onClick={() => handleRegenerateClick(group.groupKey, group.messages.length)}>
-                        Regenerate Message
-                      </button>
-                    ) : null}
-                    {canSwitchVersion ? (
-                      <>
-                        <button
-                          type="button"
-                          disabled={selectedIndex <= 0}
-                          onClick={() => {
-                            setMenuOpenForGroupKey(null);
-                            setSelectedAssistantIndexByGroup((current) => ({
-                              ...current,
-                              [group.groupKey]: Math.max(0, selectedIndex - 1),
-                            }));
-                          }}
-                        >
-                          Previous Version
-                        </button>
-                        <button
-                          type="button"
-                          disabled={selectedIndex >= group.messages.length - 1}
-                          onClick={() => {
-                            setMenuOpenForGroupKey(null);
-                            setSelectedAssistantIndexByGroup((current) => ({
-                              ...current,
-                              [group.groupKey]: Math.min(group.messages.length - 1, selectedIndex + 1),
-                            }));
-                          }}
-                        >
-                          Next Version
-                        </button>
-                        <button
-                          type="button"
-                          disabled={selectedIndex >= group.messages.length - 1}
-                          onClick={() => {
-                            setMenuOpenForGroupKey(null);
-                            setSelectedAssistantIndexByGroup((current) => ({
-                              ...current,
-                              [group.groupKey]: group.messages.length - 1,
-                            }));
-                          }}
-                        >
-                          Latest Version
-                        </button>
-                      </>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
+          <AssistantMessageRow
+            key={group.groupKey}
+            group={group}
+            selectedIndex={selectedIndex}
+            menuOpen={menuOpenForGroupKey === group.groupKey}
+            canRegenerate={!hasRegenerateInProgress && latestAssistantGroupKey === group.groupKey}
+            isQuoteSelected={quoteSelection?.messageId === message.id}
+            onRegenerate={handleRegenerateClick}
+            onSetMenuOpen={setMenuOpenForGroupKey}
+            onSetSelectedIndex={(key, index) =>
+              setSelectedAssistantIndexByGroup((current) => ({ ...current, [key]: index }))
+            }
+            onCaptureSelection={captureAssistantSelection}
+            onApplyQuoteSelection={applyQuoteSelection}
+            onCopyText={(content) => {
+              try {
+                void navigator.clipboard
+                  .writeText(content)
+                  .then(() => {
+                    setMenuOpenForGroupKey(null);
+                    pushToast("Copied!", "success");
+                  })
+                  .catch(() => {
+                    pushToast("Failed to copy text.", "error");
+                  });
+              } catch {
+                pushToast("Failed to copy text.", "error");
+              }
+            }}
+          />
         );
       })}
 
@@ -520,7 +579,7 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
               </details>
             )}
             <div className="ba-markdown">
-              <Markdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+              <Markdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS}>
                 {normalizeMessageMarkdown(streamFailureBody)}
               </Markdown>
             </div>
@@ -580,7 +639,7 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
             )}
             {streamingMessage && (
               <div className="ba-markdown">
-                <Markdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                <Markdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS}>
                   {normalizeMessageMarkdown(`${streamingMessage} ▌`)}
                 </Markdown>
               </div>

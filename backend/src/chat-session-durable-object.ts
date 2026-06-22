@@ -83,6 +83,9 @@ import {
   applySchemaV10,
   applySchemaV11,
   applySchemaV12,
+  applySchemaV13,
+  applySchemaV14,
+  applySchemaV15,
   ensureDatabaseReady,
   SerializedError,
   serializeError,
@@ -204,6 +207,7 @@ import {
   CHAT_STREAM_POLL_INTERVAL_MS,
   CHAT_STREAM_RETENTION_MAX_EVENTS,
   CHAT_STREAM_RETENTION_MAX_TERMINAL_JOBS,
+  CHAT_STREAM_UPSTREAM_TIMEOUT_MS,
   sleep,
   upsertChatStreamJobRecord,
   fetchActiveChatStreamJob,
@@ -223,6 +227,7 @@ export class ChatSessionDurableObject {
   private nextSequence = 1;
   private firstSequence = 1;
   private processing = false;
+  private queueInitialized = false;
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -244,9 +249,10 @@ export class ChatSessionDurableObject {
   }
 
   private async loadState(): Promise<void> {
-    const [meta, jobs] = await Promise.all([
+    const [meta, jobs, runtime] = await Promise.all([
       this.state.storage.get<ChatStreamMeta>(CHAT_STREAM_META_KEY),
       this.state.storage.list<ChatStreamStoredJob>({ prefix: CHAT_STREAM_JOB_KEY_PREFIX }),
+      this.state.storage.list<ChatStreamSubmitPayload>({ prefix: "runtime:payload:" }),
     ]);
     if (meta) {
       this.nextSequence = Number(meta.next_sequence ?? 1);
@@ -257,6 +263,14 @@ export class ChatSessionDurableObject {
         .filter((job): job is ChatStreamStoredJob => Boolean(job?.job_id))
         .map((job) => [job.job_id, job]),
     );
+    for (const [key, value] of runtime) {
+      const jobId = key.slice("runtime:payload:".length);
+      this.runtimePayloads.set(jobId, value);
+    }
+
+    if (!this.processing) {
+      this.state.waitUntil(this.processQueue());
+    }
   }
 
   private toJobStorageKey(jobId: string): string {
@@ -348,8 +362,14 @@ export class ChatSessionDurableObject {
   private queueWrite(subscriber: LiveSubscriber, chunk: string): void {
     subscriber.pending = subscriber.pending
       .then(() => subscriber.writer.write(this.encoder.encode(chunk)))
-      .catch(() => {
+      .catch((error) => {
+        logTrace("chat.do.broadcast_write_failed", { subscriber_id: subscriber.id, job_id: subscriber.job_id, error: String(error) });
         this.subscribers.delete(subscriber.id);
+        try {
+          subscriber.writer.abort(error).catch(() => {});
+        } catch {
+          // ignore
+        }
       });
   }
 
@@ -468,7 +488,10 @@ export class ChatSessionDurableObject {
     };
     this.jobs.set(jobId, job);
     this.runtimePayloads.set(jobId, payload);
-    await this.persistJob(job);
+    await Promise.all([
+      this.persistJob(job),
+      this.state.storage.put(`runtime:payload:${jobId}`, payload),
+    ]);
     const userMessageEvent = await this.appendEvent(jobId, "user_message", { user_message_id: payload.user_message_id });
     job.cursor = userMessageEvent.sequence;
     job.updated_at = Date.now();
@@ -644,57 +667,87 @@ export class ChatSessionDurableObject {
     this.processing = true;
     try {
       while (true) {
-        const queued = [...this.jobs.values()]
-          .filter((item) => item.state === "queued")
+        const now = Date.now();
+        const stuckJob = [...this.jobs.values()].find((job) => job.state === "running" && now - job.updated_at > 300_000);
+        if (stuckJob) {
+          logInfo("chat.do.cleanup_stuck_job", { job_id: stuckJob.job_id, session_id: stuckJob.payload.session_id });
+          stuckJob.state = "failed";
+          stuckJob.error = "Job timed out (stuck in running for > 5 mins).";
+          stuckJob.updated_at = now;
+          await this.persistJob(stuckJob);
+          try {
+            await upsertChatStreamJobRecord(this.env.D1_DB, stuckJob);
+          } catch {
+            // ignore D1 failure
+          }
+          await this.appendEvent(stuckJob.job_id, "job_failed", { error: stuckJob.error });
+          this.runtimePayloads.delete(stuckJob.job_id);
+          await this.state.storage.delete(`runtime:payload:${stuckJob.job_id}`);
+          continue;
+        }
+
+        const target = [...this.jobs.values()]
+          .filter((item) => item.state === "queued" || item.state === "running")
           .sort((a, b) => a.created_at - b.created_at)[0];
-        if (!queued) {
+        if (!target) {
           break;
         }
-        queued.state = "running";
-        queued.updated_at = Date.now();
-        this.jobs.set(queued.job_id, queued);
-        await this.persistJob(queued);
-        try {
-          await upsertChatStreamJobRecord(this.env.D1_DB, queued);
-        } catch (error) {
-          logError("chat.do.recovery_state_persist_failed", {
-            session_id: queued.payload.session_id,
-            job_id: queued.job_id,
-            state: queued.state,
-          }, error);
+
+        const isResuming = target.state === "running";
+        if (!isResuming) {
+          target.state = "running";
+          target.updated_at = Date.now();
+          this.jobs.set(target.job_id, target);
+          await this.persistJob(target);
+          try {
+            await upsertChatStreamJobRecord(this.env.D1_DB, target);
+          } catch (error) {
+            logError("chat.do.recovery_state_persist_failed", {
+              session_id: target.payload.session_id,
+              job_id: target.job_id,
+              state: target.state,
+            }, error);
+          }
+          await this.appendEvent(target.job_id, "job_started", { state: "running" });
+          logInfo("chat.do.job_started", {
+            session_id: target.payload.session_id,
+            job_id: target.job_id,
+            user_id: target.payload.user_id,
+          });
+        } else {
+          logInfo("chat.do.job_resuming", {
+            session_id: target.payload.session_id,
+            job_id: target.job_id,
+          });
         }
-        await this.appendEvent(queued.job_id, "job_started", { state: "running" });
-        logInfo("chat.do.job_started", {
-          session_id: queued.payload.session_id,
-          job_id: queued.job_id,
-          user_id: queued.payload.user_id,
-        });
+
         try {
-          const runtimePayload = this.runtimePayloads.get(queued.job_id);
+          const runtimePayload = this.runtimePayloads.get(target.job_id);
           if (!runtimePayload) {
             throw new Error("Streaming payload expired. Please retry.");
           }
-          await this.runJob(queued, runtimePayload);
-          queued.state = "completed";
-          queued.updated_at = Date.now();
-          this.jobs.set(queued.job_id, queued);
-          await this.persistJob(queued);
+          await this.runJob(target, runtimePayload);
+          target.state = "completed";
+          target.updated_at = Date.now();
+          this.jobs.set(target.job_id, target);
+          await this.persistJob(target);
           try {
-            await upsertChatStreamJobRecord(this.env.D1_DB, queued);
+            await upsertChatStreamJobRecord(this.env.D1_DB, target);
           } catch (error) {
             logError("chat.do.recovery_state_persist_failed", {
-              session_id: queued.payload.session_id,
-              job_id: queued.job_id,
-              state: queued.state,
+              session_id: target.payload.session_id,
+              job_id: target.job_id,
+              state: target.state,
             }, error);
           }
-          await this.appendEvent(queued.job_id, "job_completed", { state: "completed" });
+          await this.appendEvent(target.job_id, "job_completed", { state: "completed" });
           logInfo("chat.do.job_completed", {
-            session_id: queued.payload.session_id,
-            job_id: queued.job_id,
+            session_id: target.payload.session_id,
+            job_id: target.job_id,
           });
-          await this.closeSubscribersForJob(queued.job_id);
-          this.runtimePayloads.delete(queued.job_id);
+          await this.closeSubscribersForJob(target.job_id);
+          this.runtimePayloads.delete(target.job_id);
+          await this.state.storage.delete(`runtime:payload:${target.job_id}`);
           await this.pruneTerminalJobs();
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : "Internal error";
@@ -706,26 +759,26 @@ export class ChatSessionDurableObject {
             upstream_model?: string;
             upstream_iteration?: number;
           }) : null;
-          queued.state = "failed";
-          queued.error = errorMessage;
-          queued.updated_at = Date.now();
-          this.jobs.set(queued.job_id, queued);
-          await this.persistJob(queued);
+          target.state = "failed";
+          target.error = errorMessage;
+          target.updated_at = Date.now();
+          this.jobs.set(target.job_id, target);
+          await this.persistJob(target);
           try {
-            await upsertChatStreamJobRecord(this.env.D1_DB, queued);
+            await upsertChatStreamJobRecord(this.env.D1_DB, target);
           } catch (persistError) {
             logError("chat.do.recovery_state_persist_failed", {
-              session_id: queued.payload.session_id,
-              job_id: queued.job_id,
-              state: queued.state,
+              session_id: target.payload.session_id,
+              job_id: target.job_id,
+              state: target.state,
             }, persistError);
           }
-          await this.appendEvent(queued.job_id, "job_failed", { error: errorMessage });
+          await this.appendEvent(target.job_id, "job_failed", { error: errorMessage });
           logError("chat.do.job_failed", {
-            session_id: queued.payload.session_id,
-            job_id: queued.job_id,
-            user_id: queued.payload.user_id,
-            user_message_id: queued.payload.user_message_id,
+            session_id: target.payload.session_id,
+            job_id: target.job_id,
+            user_id: target.payload.user_id,
+            user_message_id: target.payload.user_message_id,
             error: errorMessage,
             ...(upstreamError?.upstream_status !== undefined ? {
               failure_stage: "upstream_request",
@@ -737,8 +790,9 @@ export class ChatSessionDurableObject {
               upstream_iteration: upstreamError.upstream_iteration ?? null,
             } : {}),
           });
-          await this.closeSubscribersForJob(queued.job_id);
-          this.runtimePayloads.delete(queued.job_id);
+          await this.closeSubscribersForJob(target.job_id);
+          this.runtimePayloads.delete(target.job_id);
+          await this.state.storage.delete(`runtime:payload:${target.job_id}`);
           await this.pruneTerminalJobs();
         }
       }
@@ -787,14 +841,22 @@ export class ChatSessionDurableObject {
               })),
             };
 
-        const upstream = await fetch(payload.api_endpoint, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${this.env.AI_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(currentUpstreamRequestBody),
-        });
+        const upstreamAbortController = new AbortController();
+        const upstreamTimeout = setTimeout(() => upstreamAbortController.abort(), CHAT_STREAM_UPSTREAM_TIMEOUT_MS);
+        let upstream: Response;
+        try {
+          upstream = await fetch(payload.api_endpoint, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${this.env.AI_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(currentUpstreamRequestBody),
+            signal: upstreamAbortController.signal,
+          });
+        } finally {
+          clearTimeout(upstreamTimeout);
+        }
         if (!upstream.ok) {
           const reason = await upstream.text();
           const upstreamReason = formatTraceText(reason.trim()) || "Upstream request failed.";
@@ -914,11 +976,13 @@ export class ChatSessionDurableObject {
                       const deltaText = typeof delta.content === "string" ? delta.content : extractModelMessageContent(delta.content);
                       if (deltaText) {
                         fullResponse += deltaText;
+                        job.updated_at = Date.now();
                         await this.appendEvent(job.job_id, "content_delta", { content_delta: deltaText });
                       }
                     }
                     if (delta.reasoning) {
                       reasoningSummary += delta.reasoning;
+                      job.updated_at = Date.now();
                       await this.appendEvent(job.job_id, "reasoning_delta", { reasoning_delta: delta.reasoning });
                     }
                     if (delta.tool_calls) {

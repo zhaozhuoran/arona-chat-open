@@ -46,7 +46,7 @@ export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 export const DEFAULT_MODEL = "google/gemini-3-flash-preview";
 export const DEFAULT_PASSKEY_RP_NAME = "Arona Chat";
 export const MAX_SESSION_TITLE_LENGTH = 60;
-export const LATEST_SCHEMA_VERSION = 13;
+export const LATEST_SCHEMA_VERSION = 15;
 export const EMPTY_MODEL_TEXT_FALLBACK = " ";
 export const API_FILES_PREFIX_RE = /^\/api\/files\/+/;
 export const AUTHENTICATED_FILE_PROXY_PATH_RE = /\/api\/files\/(?!public(?:\?|$))/;
@@ -736,6 +736,14 @@ export const applySchemaV13 = async (db: D1Database): Promise<void> => {
   await addColumnIfMissing(db, "user_profile", "usage_by_model_json", "TEXT");
 };
 
+export const applySchemaV14 = async (db: D1Database): Promise<void> => {
+  // Version 14 was related to a retracted code change.
+};
+
+export const applySchemaV15 = async (db: D1Database): Promise<void> => {
+  // Sequential version bump to v15.
+};
+
 export const ensureDatabaseReady = async (db: D1Database): Promise<void> => {
   if (schemaReady) {
     return;
@@ -870,6 +878,24 @@ export const ensureDatabaseReady = async (db: D1Database): Promise<void> => {
           .run();
       }
 
+      if (currentVersion < 14) {
+        await applySchemaV14(db);
+        currentVersion = 14;
+        await db
+          .prepare("UPDATE schema_meta SET version = ?, updated_at = ? WHERE id = 1")
+          .bind(currentVersion, Date.now())
+          .run();
+      }
+
+      if (currentVersion < 15) {
+        await applySchemaV15(db);
+        currentVersion = 15;
+        await db
+          .prepare("UPDATE schema_meta SET version = ?, updated_at = ? WHERE id = 1")
+          .bind(currentVersion, Date.now())
+          .run();
+      }
+
       if (currentVersion > LATEST_SCHEMA_VERSION) {
         throw new Error(`Database schema version ${currentVersion} is newer than backend supported version ${LATEST_SCHEMA_VERSION}.`);
       }
@@ -980,6 +1006,25 @@ export const parseTraceBody = (rawText: string, contentType: string): unknown =>
   return formatTraceText(trimmed);
 };
 
+export const redactSensitiveData = (data: unknown, sensitiveKeys: string[]): unknown => {
+  if (typeof data !== "object" || data === null) {
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return data.map((item) => redactSensitiveData(item, sensitiveKeys));
+  }
+  const redacted = { ...data } as Record<string, unknown>;
+  for (const key of Object.keys(redacted)) {
+    const lowerKey = key.toLowerCase();
+    if (sensitiveKeys.some((s) => lowerKey.includes(s.toLowerCase()))) {
+      redacted[key] = "[REDACTED]";
+    } else {
+      redacted[key] = redactSensitiveData(redacted[key], sensitiveKeys);
+    }
+  }
+  return redacted;
+};
+
 export const readTraceRequestBody = async (request: Request): Promise<unknown> => {
   if (request.method === "GET" || request.method === "HEAD") {
     return null;
@@ -993,7 +1038,8 @@ export const readTraceRequestBody = async (request: Request): Promise<unknown> =
     };
   }
   const rawText = await request.clone().text();
-  return parseTraceBody(rawText, contentType);
+  const body = parseTraceBody(rawText, contentType);
+  return redactSensitiveData(body, ["password", "secret", "token", "apiKey"]);
 };
 
 export const readTraceResponseBody = async (response: Response): Promise<unknown> => {
@@ -1006,7 +1052,8 @@ export const readTraceResponseBody = async (response: Response): Promise<unknown
     };
   }
   const rawText = await response.clone().text();
-  return parseTraceBody(rawText, contentType);
+  const body = parseTraceBody(rawText, contentType);
+  return redactSensitiveData(body, ["password", "secret", "token", "apiKey"]);
 };
 
 app.use(

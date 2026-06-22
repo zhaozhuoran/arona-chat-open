@@ -861,12 +861,14 @@ const consumeChatStream = async (
   logLevel: LogLevel,
   onMessageDelta: (content: string) => void,
   onReasoningDelta: (reasoning: string) => void,
+  initialContent: string = "",
+  initialReasoning: string = "",
 ): Promise<{ content: string; reasoning: string; warning: string | null; failure: string | null; userMessageId: string | null; cursor: string }> => {
   const normalizedInitialCursor = normalizeCursorSequence(initialCursor);
   let cursor = normalizedInitialCursor.cursor;
   let lastSequence = normalizedInitialCursor.sequence;
-  let streamedContent = "";
-  let streamedReasoning = "";
+  let streamedContent = initialContent;
+  let streamedReasoning = initialReasoning;
   let userMessageId: string | null = null;
   let terminal = false;
   let failure: string | null = null;
@@ -1554,11 +1556,12 @@ export const useStore = create<Store>((set, get) => ({
       return;
     }
     const token = ensureToken(get().token);
+    const isSameSession = get().sessionId === sessionId;
     set({
       sessionId,
       loadingMessages: true,
-      streamingMessage: "",
-      streamingReasoning: "",
+      streamingMessage: isSameSession ? get().streamingMessage : "",
+      streamingReasoning: isSameSession ? get().streamingReasoning : "",
       streamRecovery: null,
       streamFailure: null,
     });
@@ -1580,17 +1583,22 @@ export const useStore = create<Store>((set, get) => ({
 
       if (inflight && inflight.job_id) {
         const tokenForResume = ensureToken(get().token);
-        set({ sendingMessage: true, streamingMessage: "", streamingReasoning: "", streamFailure: null });
+        const currentContent = get().streamingMessage;
+        const currentReasoning = get().streamingReasoning;
+        set({ sendingMessage: true, streamFailure: null });
         try {
           const resumeCursor = normalizeCursorSequence(inflight.cursor);
+          const cursorToUse = (currentContent || currentReasoning) ? resumeCursor.cursor : "";
           const streamResult = await consumeChatStream(
             tokenForResume,
             sessionId,
             inflight.job_id,
-            resumeCursor.cursor,
+            cursorToUse,
             get().logLevel,
             (nextContent) => set({ streamingMessage: nextContent }),
             (nextReasoning) => set({ streamingReasoning: nextReasoning }),
+            currentContent,
+            currentReasoning,
           );
           const persistedUserMessageId = streamResult.userMessageId ?? inflight.user_message_id;
           if (streamResult.failure) {
@@ -1902,6 +1910,8 @@ export const useStore = create<Store>((set, get) => ({
         get().logLevel,
         (nextContent) => set({ streamingMessage: nextContent }),
         (nextReasoning) => set({ streamingReasoning: nextReasoning }),
+        get().streamingMessage,
+        get().streamingReasoning,
       );
       persistInflightStream(sessionId, null);
       const persistedUserMessageId = streamResult.userMessageId ?? serverUserMessageId ?? userMessage.id;
@@ -2137,6 +2147,8 @@ export const useStore = create<Store>((set, get) => ({
         get().logLevel,
         (nextContent) => set({ streamingMessage: nextContent }),
         (nextReasoning) => set({ streamingReasoning: nextReasoning }),
+        get().streamingMessage,
+        get().streamingReasoning,
       );
       persistInflightStream(sessionId, null);
       const persistedUserMessageId = streamResult.userMessageId ?? submit.user_message_id ?? sourceUserMessage.id;
@@ -2208,22 +2220,26 @@ export const useStore = create<Store>((set, get) => ({
       return;
     }
     const token = ensureToken(get().token);
+    const currentContent = get().streamingMessage;
+    const currentReasoning = get().streamingReasoning;
     set({
       sendingMessage: true,
       streamRecovery: { ...recovery, mode: "reconnecting", last_error: null },
-      streamingMessage: "",
-      streamingReasoning: "",
       streamFailure: null,
     });
     try {
+      const resumeCursor = normalizeCursorSequence(recovery.cursor);
+      const cursorToUse = (currentContent || currentReasoning) ? resumeCursor.cursor : "";
       const streamResult = await consumeChatStream(
         token,
         recovery.session_id,
         recovery.job_id,
-        normalizeCursorSequence(recovery.cursor).cursor,
+        cursorToUse,
         get().logLevel,
         (nextContent) => set({ streamingMessage: nextContent }),
         (nextReasoning) => set({ streamingReasoning: nextReasoning }),
+        currentContent,
+        currentReasoning,
       );
       const persistedUserMessageId = streamResult.userMessageId ?? recovery.user_message_id;
       if (streamResult.failure) {
