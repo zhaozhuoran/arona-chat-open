@@ -43,6 +43,10 @@ BRAVE_SEARCH_API_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 # R2_ENDPOINT = "https://<account-id>.r2.cloudflarestorage.com"
 # AUTH_PASSWORD = ""
 # AUTH_TOKEN_SECRET = ""
+# CLERK_SECRET_KEY = ""
+# CLERK_PUBLISHABLE_KEY = ""
+# USERS_ADMIN_EMAILS = ""
+# USERS_ADMIN_EMAILS = ""
 
 # Optional runtime values for deployments that expose R2 or the API behind a custom host.
 # R2_PUBLIC_BASE_URL = "https://<your-r2-public-host>"

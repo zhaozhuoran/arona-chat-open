@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
+import { secureHeaders } from "hono/secure-headers";
 import { AwsClient } from "aws4fetch";
 import {
   generateAuthenticationOptions,
@@ -16,6 +17,7 @@ import { SYSTEM_PROMPT_TIMEZONE_OPTIONS, type LogLevel, type MessageAttachmentTy
 import type { Env } from "./types";
 import { TOOLS, getAvailableTools } from "./tools";
 import { GENERATED_BACKEND_BUILD_HASH, GENERATED_BACKEND_BUILD_TIME } from "./build-info.generated";
+import { getAdminEmails, isAdminEmail, verifyClerkToken, getClerkUserEmail } from "./auth-utils";
 
 export type AppVariables = {
   requestId: string;
@@ -243,6 +245,7 @@ Provide highly reliable, structured, and accurate assistance, while maintaining 
 
 
 export const DEFAULT_MODEL_DEFS: Array<{ id: string; name: string }> = [
+  { id: "google/gemini-3.5-flash", name: "Google: Gemini 3.5 Flash" },
   { id: "google/gemini-3-flash-preview", name: "Google: Gemini 3 Flash Preview" },
 ];
 
@@ -251,6 +254,7 @@ export const DEFAULT_MODEL_DEFS: Array<{ id: string; name: string }> = [
 */
 
 export const DEFAULT_PRICING: Record<string, { input_usd_per_million: number; output_usd_per_million: number }> = {
+  "google/gemini-3.5-flash": { input_usd_per_million: 1.50, output_usd_per_million: 9.00 },
   "google/gemini-3-flash-preview": { input_usd_per_million: 0.50, output_usd_per_million: 3.00 },
 };
 
@@ -1014,9 +1018,12 @@ export const redactSensitiveData = (data: unknown, sensitiveKeys: string[]): unk
     return data.map((item) => redactSensitiveData(item, sensitiveKeys));
   }
   const redacted = { ...data } as Record<string, unknown>;
+  const lowerSensitiveKeys = sensitiveKeys.map((s) => s.toLowerCase());
   for (const key of Object.keys(redacted)) {
     const lowerKey = key.toLowerCase();
-    if (sensitiveKeys.some((s) => lowerKey.includes(s.toLowerCase()))) {
+    // Normalize key by removing common separators to catch variants like api_key vs apiKey
+    const normalizedKey = lowerKey.replace(/[_-]/g, "");
+    if (lowerSensitiveKeys.some((s) => normalizedKey.includes(s) || lowerKey.includes(s))) {
       redacted[key] = "[REDACTED]";
     } else {
       redacted[key] = redactSensitiveData(redacted[key], sensitiveKeys);
@@ -1039,7 +1046,7 @@ export const readTraceRequestBody = async (request: Request): Promise<unknown> =
   }
   const rawText = await request.clone().text();
   const body = parseTraceBody(rawText, contentType);
-  return redactSensitiveData(body, ["password", "secret", "token", "apiKey"]);
+  return redactSensitiveData(body, ["password", "secret", "token", "key", "auth", "credential", "signature", "passkey"]);
 };
 
 export const readTraceResponseBody = async (response: Response): Promise<unknown> => {
@@ -1053,7 +1060,7 @@ export const readTraceResponseBody = async (response: Response): Promise<unknown
   }
   const rawText = await response.clone().text();
   const body = parseTraceBody(rawText, contentType);
-  return redactSensitiveData(body, ["password", "secret", "token", "apiKey"]);
+  return redactSensitiveData(body, ["password", "secret", "token", "key", "auth", "credential", "signature", "passkey"]);
 };
 
 app.use(
@@ -1062,6 +1069,15 @@ app.use(
     origin: "*",
     allowHeaders: ["Content-Type", "Authorization"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  }),
+);
+
+// Add security headers for defense in depth
+app.use(
+  "/*",
+  secureHeaders({
+    crossOriginResourcePolicy: "cross-origin",
+    referrerPolicy: "strict-origin-when-cross-origin",
   }),
 );
 
@@ -1310,6 +1326,35 @@ export const requireAuth = async (c: AppContext): Promise<AuthTokenPayload | Res
     return c.json({ error: "Authentication required." }, 401);
   }
 
+  // First try verify as Clerk token
+  const clerkClaims = await verifyClerkToken(c, token);
+  if (clerkClaims) {
+    let email = (clerkClaims as any).email;
+    if (!email && clerkClaims.sub) {
+      // Fetch email from Clerk API if not in JWT claims
+      email = await getClerkUserEmail(c, clerkClaims.sub);
+    }
+
+    if (!email) {
+      return c.json({ error: "Clerk session does not contain email." }, 403);
+    }
+
+    const adminEmails = getAdminEmails(c.env);
+    if (!isAdminEmail(email, adminEmails)) {
+      logInfo("auth.clerk_admin_denied", { ...buildRequestLogPayload(c), email });
+      return c.json({ error: "Access Denied: You are not an authorized admin." }, 403);
+    }
+
+    // Map all authorized Clerk admins to the fixed single-user identity
+    return {
+      sub: "single-user",
+      method: "passkey", // Defaulting to passkey method for Clerk sessions
+      iat: clerkClaims.iat || Math.floor(Date.now() / 1000),
+      exp: clerkClaims.exp || Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS,
+    };
+  }
+
+  // Fallback to legacy JWT verification (e.g. for existing passkey sessions if we still allow them)
   const payload = await verifyAuthToken(c.env, token);
   if (!payload) {
     return c.json({ error: "Invalid or expired token." }, 401);

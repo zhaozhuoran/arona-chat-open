@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { SYSTEM_PROMPT_TIMEZONE_OPTIONS, type ChatGenerationSettings, type LogLevel, type ModelOption, type PasskeyInfo, type ReasoningEffort, type ServiceTier, type UsageSummary, type UserProfile, type Workspace } from "@arona-chat/shared";
-import { BarChart2, Bot, ShieldCheck, UserRound, X, Settings2 } from "lucide-react";
+import { SYSTEM_PROMPT_TIMEZONE_OPTIONS, type ChatGenerationSettings, type LogLevel, type ModelOption, type ReasoningEffort, type ServiceTier, type UsageSummary, type UserProfile, type Workspace } from "@arona-chat/shared";
+import { BarChart2, Bot, UserRound, X, Settings2 } from "lucide-react";
 
-type SettingsTab = "profile" | "security" | "model" | "usage" | "advanced";
+type SettingsTab = "profile" | "model" | "usage" | "advanced";
 
 type ProfileUpdatePayload = {
   username?: string;
@@ -21,7 +21,6 @@ type SettingsPanelProps = {
   usage: UsageSummary | null;
   dailyUsage: UsageSummary | null;
   dailyUsageDate: string | null;
-  passkeys: PasskeyInfo[];
   models: ModelOption[];
   selectedModel: string;
   titleModel: string;
@@ -46,8 +45,6 @@ type SettingsPanelProps = {
   onArchiveWorkspace: (workspaceId: string, archived?: boolean) => Promise<void>;
   onActivateWorkspace: (workspaceId: string) => Promise<void>;
   onSyncUsage: () => Promise<void>;
-  onRegisterPasskey: (nickname?: string) => Promise<void>;
-  onRemovePasskey: (credentialId: string) => Promise<void>;
 };
 
 const formatUsd = (value: number): string => `$${value.toFixed(6)}`;
@@ -72,7 +69,6 @@ export const SettingsPanel = ({
   usage,
   dailyUsage,
   dailyUsageDate,
-  passkeys,
   models,
   selectedModel,
   titleModel,
@@ -97,8 +93,6 @@ export const SettingsPanel = ({
   onArchiveWorkspace,
   onActivateWorkspace,
   onSyncUsage,
-  onRegisterPasskey,
-  onRemovePasskey,
 }: SettingsPanelProps) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
   const [username, setUsername] = useState(profile?.username ?? "");
@@ -118,8 +112,6 @@ export const SettingsPanel = ({
   const [timezoneOption, setTimezoneOption] = useState(systemPromptTimezone);
   const [showArchivedOption, setShowArchivedOption] = useState(showArchivedSessions);
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
-  const [passkeyNickname, setPasskeyNickname] = useState("");
-
   useEffect(() => {
     setUsername(profile?.username ?? "");
     setDynamicBackground(profile?.dynamic_background ?? true);
@@ -192,7 +184,6 @@ export const SettingsPanel = ({
 
   const TABS: { id: SettingsTab; label: string; icon: ReactNode }[] = [
     { id: "profile", label: "Profile", icon: <UserRound size={15} /> },
-    { id: "security", label: "Security", icon: <ShieldCheck size={15} /> },
     { id: "model", label: "Model & Chat", icon: <Bot size={15} /> },
     { id: "usage", label: "Usage", icon: <BarChart2 size={15} /> },
     { id: "advanced", label: "Advanced", icon: <Settings2 size={15} /> },
@@ -206,7 +197,6 @@ export const SettingsPanel = ({
             <p>Settings</p>
             <span>
               {activeTab === "profile" && "Profile, timezone and workspaces"}
-              {activeTab === "security" && "Passkeys and authentication"}
               {activeTab === "model" && "Model selection and generation settings"}
               {activeTab === "usage" && "Budget tracking and usage analytics"}
               {activeTab === "advanced" && "System maintenance and advanced tools"}
@@ -243,20 +233,32 @@ export const SettingsPanel = ({
               </h3>
               <div className="ba-profile-row">
                 <img src={profile?.avatar_url || "/ba/arona-logo.jpg"} alt="avatar" />
-                <label className="ba-file-upload">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) {
-                        void onUploadAvatar(file);
-                      }
-                      event.currentTarget.value = "";
-                    }}
-                  />
-                  <span>Upload Avatar</span>
-                </label>
+                <div className="ba-profile-actions">
+                  <label className="ba-file-upload">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) {
+                          void onUploadAvatar(file);
+                        }
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                    <span>Upload Avatar</span>
+                  </label>
+                  {import.meta.env.VITE_CLERK_USER_PROFILE_URL && (
+                    <a
+                      href={import.meta.env.VITE_CLERK_USER_PROFILE_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ba-settings-action-link"
+                    >
+                      Go to Account Settings
+                    </a>
+                  )}
+                </div>
               </div>
 
               <label className="ba-settings-field">
@@ -417,50 +419,6 @@ export const SettingsPanel = ({
             </article>
           )}
 
-          {activeTab === "security" && (
-            <article className="ba-settings-card">
-              <h3>
-                <ShieldCheck size={16} />
-                Security
-              </h3>
-
-              <label className="ba-settings-field">
-                <span>Passkey Nickname (optional)</span>
-                <input
-                  value={passkeyNickname}
-                  onChange={(event) => setPasskeyNickname(event.target.value)}
-                  placeholder="e.g. MacBook Touch ID"
-                />
-              </label>
-
-              <button
-                type="button"
-                className="ba-settings-action"
-                disabled={loading}
-                onClick={() => {
-                  void onRegisterPasskey(passkeyNickname.trim() || undefined);
-                  setPasskeyNickname("");
-                }}
-              >
-                Add Passkey
-              </button>
-
-              <div className="ba-passkey-list">
-                {passkeys.length === 0 && <p className="ba-muted-text">No passkeys added yet.</p>}
-                {passkeys.map((passkey) => (
-                  <div key={passkey.id} className="ba-passkey-item">
-                    <div>
-                      <strong>{passkey.nickname || "Unnamed passkey"}</strong>
-                      <span>{passkey.device_type}</span>
-                    </div>
-                    <button type="button" onClick={() => void onRemovePasskey(passkey.id)}>
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </article>
-          )}
 
           {activeTab === "model" && (
             <article className="ba-settings-card">

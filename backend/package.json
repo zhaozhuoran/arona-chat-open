@@ -8,8 +8,9 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "@simplewebauthn/server": "^13.1.0",
     "@arona-chat/shared": "*",
+    "@clerk/backend": "^3.8.4",
+    "@simplewebauthn/server": "^13.1.0",
     "aws4fetch": "^1.0.20",
     "hono": "^4.0.0"
   },

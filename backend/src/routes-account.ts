@@ -218,33 +218,7 @@ import {
 import { SYSTEM_PROMPT_TIMEZONE_OPTIONS, type LogLevel } from "@arona-chat/shared";
 
 app.post("/api/auth/password-login", async (c) => {
-  const body = await c.req.json<{ password?: string }>();
-  const password = body.password?.trim();
-
-  if (!c.env.AUTH_PASSWORD) {
-    logError("auth.password_login_misconfigured", buildRequestLogPayload(c));
-    return c.json({ error: "AUTH_PASSWORD is not configured on server." }, 500);
-  }
-  if (!password) {
-    logInfo("auth.password_login_rejected", buildRequestLogPayload(c));
-    return c.json({ error: "Invalid password." }, 401);
-  }
-
-  const passwordBytes = encoder.encode(password);
-  const correctBytes = encoder.encode(c.env.AUTH_PASSWORD);
-  const passwordHash = await crypto.subtle.digest("SHA-256", passwordBytes);
-  const correctHash = await crypto.subtle.digest("SHA-256", correctBytes);
-  const passwordHashStr = btoa(String.fromCharCode(...new Uint8Array(passwordHash)));
-  const correctHashStr = btoa(String.fromCharCode(...new Uint8Array(correctHash)));
-
-  if (!timingSafeEqual(passwordHashStr, correctHashStr)) {
-    logInfo("auth.password_login_rejected", buildRequestLogPayload(c));
-    return c.json({ error: "Invalid password." }, 401);
-  }
-
-  const token = await issueAuthToken(c.env, "password");
-  logInfo("auth.password_login_succeeded", buildRequestLogPayload(c));
-  return c.json({ token });
+  return c.json({ error: "Password login is disabled. Please use Clerk or Passkey login." }, 403);
 });
 
 app.post("/api/auth/passkeys/auth-options", async (c) => {

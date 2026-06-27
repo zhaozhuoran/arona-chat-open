@@ -27,6 +27,7 @@ export const ChatInputArea = () => {
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { sendingMessage, sendMessage, uploadAttachment, pushToast, sendShortcut, conversationLibraryEnabled, libraryItems, libraryLoading, refreshLibrary } =
     useStore(useShallow((state) => ({
@@ -207,6 +208,14 @@ export const ChatInputArea = () => {
   }, [conversationLibraryEnabled]);
 
   useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    }
+  }, [input]);
+
+  useEffect(() => {
     const handleInsertQuote = (event: Event) => {
       const customEvent = event as CustomEvent<{ text?: string }>;
       const text = customEvent.detail?.text?.trim();
@@ -284,8 +293,10 @@ export const ChatInputArea = () => {
         <input ref={fileRef} type="file" className="ba-hidden-file-input" onChange={handleFileChange} multiple />
 
         <textarea
+          ref={textareaRef}
           className="ba-composer-input"
           placeholder="Message Arona..."
+          aria-label="Message Arona"
           rows={1}
           value={input}
           onChange={(event) => setInput(event.target.value)}

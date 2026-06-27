@@ -11,6 +11,9 @@ export interface Env {
   R2_ENDPOINT: string;
   AUTH_PASSWORD?: string;
   AUTH_TOKEN_SECRET?: string;
+  CLERK_SECRET_KEY?: string;
+  CLERK_PUBLISHABLE_KEY?: string;
+  USERS_ADMIN_EMAILS?: string;
   R2_PUBLIC_BASE_URL?: string;
   R2_PROXY_DOMAIN?: string;
   MODEL_PRICING_JSON?: string;

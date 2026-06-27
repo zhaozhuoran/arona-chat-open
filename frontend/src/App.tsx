@@ -13,6 +13,7 @@ import { LibraryPanel } from "./components/LibraryPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ToastStack } from "./components/ToastStack";
 import { SESSION_TITLE_MAX_LENGTH } from "./constants/session";
+import { useAuth } from "@clerk/clerk-react";
 import { useStore, isPreviewAvailable } from "./store/useStore";
 
 type TransitionState = "idle" | "curtain";
@@ -72,10 +73,14 @@ function App() {
   const lastUsageUpdateAtRef = useRef(0);
   const routeSyncReadyRef = useRef(false);
 
+  const { getToken, signOut } = useAuth();
+
   const {
     authReady,
     authLoading,
     authenticated,
+    accessDenied,
+    setAccessDenied,
     previewMode,
     backendBuildHash,
     backendBuildTime,
@@ -91,7 +96,6 @@ function App() {
     messages,
     sendingMessage,
     streamingMessage,
-    passkeys,
     models,
     selectedModel,
     titleModel,
@@ -140,15 +144,16 @@ function App() {
     refreshLibrary,
     uploadLibraryFile,
     deleteLibraryItem,
-    refreshPasskeys,
-    registerPasskey,
-    removePasskey,
     dismissToast,
+    setToken,
     pushToast,
   } = useStore(useShallow((state) => ({
+    setToken: state.setToken,
     authReady: state.authReady,
     authLoading: state.authLoading,
     authenticated: state.authenticated,
+    accessDenied: state.accessDenied,
+    setAccessDenied: state.setAccessDenied,
     previewMode: state.previewMode,
     backendBuildHash: state.backendBuildHash,
     backendBuildTime: state.backendBuildTime,
@@ -166,7 +171,6 @@ function App() {
     messages: state.messages,
     sendingMessage: state.sendingMessage,
     streamingMessage: state.streamingMessage,
-    passkeys: state.passkeys,
     models: state.models,
     selectedModel: state.selectedModel,
     titleModel: state.titleModel,
@@ -213,16 +217,36 @@ function App() {
     refreshLibrary: state.refreshLibrary,
     uploadLibraryFile: state.uploadLibraryFile,
     deleteLibraryItem: state.deleteLibraryItem,
-    refreshPasskeys: state.refreshPasskeys,
-    registerPasskey: state.registerPasskey,
-    removePasskey: state.removePasskey,
     dismissToast: state.dismissToast,
     pushToast: state.pushToast,
   })));
 
   useEffect(() => {
-    void initialize();
-  }, [initialize]);
+    const syncAuth = async () => {
+      const token = await getToken();
+      void initialize(token);
+    };
+    void syncAuth();
+  }, [initialize, getToken]);
+
+  useEffect(() => {
+    if (!authenticated || previewMode) {
+      return;
+    }
+
+    const interval = setInterval(async () => {
+      try {
+        const token = await getToken();
+        if (token) {
+          setToken(token);
+        }
+      } catch (error) {
+        console.error("Failed to refresh Clerk token:", error);
+      }
+    }, 50000); // 50 seconds
+
+    return () => clearInterval(interval);
+  }, [authenticated, previewMode, getToken, setToken]);
 
   useEffect(() => {
     const sessionList = sessionListRef.current;
@@ -393,8 +417,8 @@ function App() {
     if (!settingsOpen || !authenticated) {
       return;
     }
-    void Promise.all([refreshProfile(), refreshUsage(), refreshModels(), refreshPasskeys(), refreshWorkspaces(true)]);
-  }, [settingsOpen, authenticated, refreshProfile, refreshUsage, refreshModels, refreshPasskeys, refreshWorkspaces]);
+    void Promise.all([refreshProfile(), refreshUsage(), refreshModels(), refreshWorkspaces(true)]);
+  }, [settingsOpen, authenticated, refreshProfile, refreshUsage, refreshModels, refreshWorkspaces]);
 
   useEffect(() => {
     if (!bootComplete || !authenticated || hasPlayedEntryAnimation.current) {
@@ -517,7 +541,42 @@ function App() {
   }, []);
 
   if (!bootComplete || !authReady) {
-    return <BootLoader onComplete={handleBootComplete} />;
+    return (
+      <div className="ba-app is-static-bg">
+        <div className="ba-stage-bg" />
+        <div className="ba-stage-overlay" />
+        <BootLoader onComplete={handleBootComplete} />
+      </div>
+    );
+  }
+
+  if (accessDenied) {
+    return (
+      <div className="ba-app is-static-bg">
+        <div className="ba-stage-bg" />
+        <div className="ba-stage-overlay" />
+        <div className="ba-auth-screen">
+          <div className="ba-auth-card">
+            <img src="/ba/arona-logo.jpg" alt="Arona" className="ba-auth-avatar" />
+            <h1>Access Denied</h1>
+            <p className="ba-auth-denied-message">
+              Your email is not on the authorized admin list.
+            </p>
+            <button
+              type="button"
+              className="ba-auth-button primary"
+              onClick={async () => {
+                await signOut();
+                setAccessDenied(false);
+              }}
+            >
+              <span>Try Again</span>
+            </button>
+          </div>
+        </div>
+        <ToastStack toasts={toasts} dismissToast={dismissToast} />
+      </div>
+    );
   }
 
   if (!authenticated) {
@@ -756,7 +815,15 @@ function App() {
             setLibraryOpen(false);
             setSettingsOpen((current) => !current);
           }}
-          onLogout={logout}
+          onLogout={async () => {
+            try {
+              await signOut();
+            } catch (error) {
+              console.error("Clerk sign out failed:", error);
+            } finally {
+              logout();
+            }
+          }}
           showUsageInfo={hasConversationStarted}
           usageOpacity={bottomInfoOpacity}
           usageSimpleText={bottomUsageSimpleText}
@@ -778,7 +845,6 @@ function App() {
         usage={usage}
         dailyUsage={dailyUsage}
         dailyUsageDate={dailyUsageDate}
-        passkeys={passkeys}
         models={models}
         selectedModel={selectedModel}
         titleModel={titleModel}
@@ -888,21 +954,6 @@ function App() {
           }
         }}
         onSyncUsage={syncUsageAggregate}
-        onRegisterPasskey={async (nickname) => {
-
-          try {
-            await registerPasskey(nickname);
-          } catch (error) {
-            pushToast(error instanceof Error ? error.message : "Failed to register passkey.", "error");
-          }
-        }}
-        onRemovePasskey={async (credentialId) => {
-          try {
-            await removePasskey(credentialId);
-          } catch (error) {
-            pushToast(error instanceof Error ? error.message : "Failed to remove passkey.", "error");
-          }
-        }}
       />
       <AttachmentLibraryPanel
         open={attachmentLibraryOpen}

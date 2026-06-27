@@ -100,7 +100,10 @@ interface Store {
   pushToast: (message: string, type?: ToastType) => void;
   dismissToast: (id: string) => void;
 
-  initialize: () => Promise<void>;
+  initialize: (clerkToken?: string | null) => Promise<void>;
+  setToken: (token: string | null) => void;
+  accessDenied: boolean;
+  setAccessDenied: (denied: boolean) => void;
   loginWithPassword: (password: string) => Promise<void>;
   loginWithPasskey: () => Promise<void>;
   loginWithPreviewPassword: () => void;
@@ -854,7 +857,7 @@ const buildStreamFailureState = (
 });
 
 const consumeChatStream = async (
-  token: string,
+  tokenOrFn: string | (() => string | null),
   sessionId: string,
   jobId: string,
   initialCursor: string,
@@ -912,6 +915,11 @@ const consumeChatStream = async (
     };
 
     try {
+      const currentToken = typeof tokenOrFn === "function" ? tokenOrFn() : tokenOrFn;
+      if (!currentToken) {
+        throw new Error("Authentication token is missing.");
+      }
+
       resetStallTimer();
       const response = await new Promise<Response>((resolve, reject) => {
         connectionTimer = window.setTimeout(() => {
@@ -923,7 +931,7 @@ const consumeChatStream = async (
           {
             method: "GET",
             headers: {
-              Authorization: `Bearer ${token}`,
+              Authorization: `Bearer ${currentToken}`,
             },
             signal: controller.signal,
           },
@@ -1182,7 +1190,11 @@ export const useStore = create<Store>((set, get) => ({
     set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) }));
   },
 
-  initialize: async () => {
+  accessDenied: false,
+  setAccessDenied: (denied) => set({ accessDenied: denied }),
+  setToken: (token) => set({ token }),
+
+  initialize: async (clerkToken) => {
     set({ authLoading: true });
 
     // Restore preview session (sessionStorage flag set by loginWithPreviewPassword)
@@ -1229,9 +1241,9 @@ export const useStore = create<Store>((set, get) => ({
       return;
     }
 
-    const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+    const effectiveToken = clerkToken || localStorage.getItem(TOKEN_STORAGE_KEY);
 
-    if (!storedToken) {
+    if (!effectiveToken) {
       set({
         authReady: true,
         authLoading: false,
@@ -1255,12 +1267,13 @@ export const useStore = create<Store>((set, get) => ({
         active_workspace_id?: string;
         backend_build_hash?: string;
         backend_build_time?: string;
-      }>("/api/auth/me", { method: "GET", token: storedToken });
+      }>("/api/auth/me", { method: "GET", token: effectiveToken });
 
       set({
-        token: storedToken,
+        token: effectiveToken,
         authenticated: true,
         authMethod: me.method,
+        accessDenied: false,
         backendBuildHash: typeof me.backend_build_hash === "string" && me.backend_build_hash.trim()
           ? me.backend_build_hash.trim()
           : DEFAULT_BACKEND_BUILD_HASH,
@@ -1285,6 +1298,10 @@ export const useStore = create<Store>((set, get) => ({
       ]);
       warnBudget(get());
     } catch (error) {
+      const errorMessage = getErrorMessage(error);
+      if (errorMessage.includes("Access Denied")) {
+        set({ accessDenied: true });
+      }
       localStorage.removeItem(TOKEN_STORAGE_KEY);
       set({
         token: null,
@@ -1582,7 +1599,6 @@ export const useStore = create<Store>((set, get) => ({
         : null;
 
       if (inflight && inflight.job_id) {
-        const tokenForResume = ensureToken(get().token);
         const currentContent = get().streamingMessage;
         const currentReasoning = get().streamingReasoning;
         set({ sendingMessage: true, streamFailure: null });
@@ -1590,7 +1606,7 @@ export const useStore = create<Store>((set, get) => ({
           const resumeCursor = normalizeCursorSequence(inflight.cursor);
           const cursorToUse = (currentContent || currentReasoning) ? resumeCursor.cursor : "";
           const streamResult = await consumeChatStream(
-            tokenForResume,
+            () => get().token,
             sessionId,
             inflight.job_id,
             cursorToUse,
@@ -1647,7 +1663,7 @@ export const useStore = create<Store>((set, get) => ({
             });
           } else {
             persistInflightStream(sessionId, null);
-            const refreshedMessages = await fetchSessionMessages(tokenForResume, sessionId);
+            const refreshedMessages = await fetchSessionMessages(ensureToken(get().token), sessionId);
             set({
               messages: refreshedMessages,
               streamingMessage: "",
@@ -1903,7 +1919,7 @@ export const useStore = create<Store>((set, get) => ({
         created_at: Date.now(),
       });
       const streamResult = await consumeChatStream(
-        token,
+        () => get().token,
         sessionId,
         jobId,
         streamCursor,
@@ -2140,7 +2156,7 @@ export const useStore = create<Store>((set, get) => ({
         created_at: Date.now(),
       });
       const streamResult = await consumeChatStream(
-        token,
+        () => get().token,
         sessionId,
         submit.job_id,
         normalizedSubmitCursor.cursor,
@@ -2219,7 +2235,6 @@ export const useStore = create<Store>((set, get) => ({
     if (!recovery || recovery.mode !== "disconnected" || !currentSessionId || recovery.session_id !== currentSessionId || !recovery.job_id) {
       return;
     }
-    const token = ensureToken(get().token);
     const currentContent = get().streamingMessage;
     const currentReasoning = get().streamingReasoning;
     set({
@@ -2231,7 +2246,7 @@ export const useStore = create<Store>((set, get) => ({
       const resumeCursor = normalizeCursorSequence(recovery.cursor);
       const cursorToUse = (currentContent || currentReasoning) ? resumeCursor.cursor : "";
       const streamResult = await consumeChatStream(
-        token,
+        () => get().token,
         recovery.session_id,
         recovery.job_id,
         cursorToUse,
@@ -2287,7 +2302,7 @@ export const useStore = create<Store>((set, get) => ({
         return;
       }
       persistInflightStream(recovery.session_id, null);
-      const refreshedMessages = await fetchSessionMessages(token, recovery.session_id);
+      const refreshedMessages = await fetchSessionMessages(ensureToken(get().token), recovery.session_id);
       set({
         messages: refreshedMessages,
         streamingMessage: "",
@@ -2297,6 +2312,18 @@ export const useStore = create<Store>((set, get) => ({
       });
       await get().refreshSessions();
       await get().refreshSessionUsage(recovery.session_id);
+    } catch (error) {
+      set((state) => ({
+        streamRecovery: state.streamRecovery
+          ? {
+              ...state.streamRecovery,
+              mode: "disconnected",
+              last_error: `Failed to reconnect: ${getErrorMessage(error)}`,
+              created_at: Date.now(),
+            }
+          : null,
+      }));
+      get().pushToast(`Failed to reconnect stream: ${getErrorMessage(error)}`, "error");
     } finally {
       set({ sendingMessage: false });
     }
@@ -2311,7 +2338,6 @@ export const useStore = create<Store>((set, get) => ({
     if (!recovery || recovery.mode !== "disconnected" || !currentSessionId || recovery.session_id !== currentSessionId) {
       return;
     }
-    const token = ensureToken(get().token);
     set({
       sendingMessage: true,
       streamRecovery: { ...recovery, mode: "waiting", last_error: null },
@@ -2320,6 +2346,7 @@ export const useStore = create<Store>((set, get) => ({
       streamFailure: null,
     });
     try {
+      const token = ensureToken(get().token);
       const userMessageCreatedAt =
         recovery.user_message_created_at
         ?? resolveRecoveryUserMessageCreatedAt(get().messages, recovery.user_message_id)
