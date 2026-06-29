@@ -56,7 +56,7 @@ npm run dev
 
 This project was developed as part of Hack Club Stardance.
 
-Project page: [https://stardance.hackclub.com/projects/17862](https://stardance.hackclub.com/projects/17862)
+View the original project page: [https://stardance.hackclub.com/projects/17862](https://stardance.hackclub.com/projects/17862)
 
 ## 📁 Repository Status
 
