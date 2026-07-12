@@ -6,7 +6,7 @@ English | [简体中文](README-cn.md)
 ![Status](https://img.shields.io/badge/Status-Public--Mirror-orange.svg)
 [![Demo](https://img.shields.io/badge/Demo-Live%20Preview-green.svg)](https://arona-chat-open.pages.dev/login?password=preview&autologin=1)
 
-Arona Chat is a high-performance AI chat interface inspired by the _Blue Archive_ "Shittim Chest" UI. Built as a monorepo, it leverages the Cloudflare serverless ecosystem (Workers, D1, R2, Durable Objects) to deliver a cost-efficient, stateful chat experience.
+Arona Chat is a high-performance, lightweight AI chat app inspired by the _Blue Archive_ "Shittim Chest" UI. Built as a monorepo, it leverages the Cloudflare serverless ecosystem (Workers, D1, R2, Durable Objects) to deliver a cost-efficient, stateful chat experience.
 
 ## 🧠 System Architecture
 
@@ -54,7 +54,7 @@ npm run dev
 
 ## 🌟 Project Origin
 
-This project was developed as part of Hack Club Stardance.
+This project was developed as part of HackClub Stardance.
 
 View the original project page: [https://stardance.hackclub.com/projects/17862](https://stardance.hackclub.com/projects/17862)
 
@@ -66,7 +66,6 @@ Development occurs in a private upstream repository; this mirror is updated peri
 ## 🤝 Contributions
 
 Issues are welcome for bug reports and feedback.
-Pull requests are not the primary workflow for this repository.
 
 ## License
 
