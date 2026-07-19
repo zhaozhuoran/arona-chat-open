@@ -32,11 +32,13 @@ graph TD
 
 ## 🖼️ Screenshots
 
-![Arona Chat Interface](assests/screenshots/screenshot-1.png)
+> Arona Chat Interface | Ethereal Light Theme
 
-![Arona Chat Cost Tracking](assests/screenshots/screenshot-2.png)
+![Arona Chat Interface | Ethereal Light Theme](assets/screenshots/screenshot-1.png)
 
-![Arona Chat Attachment Management](assests/screenshots/screenshot-3.png)
+> Arona Chat Interface | Blue Archive Theme
+
+![Arona Chat Interface | Blue Archive Theme](assets/screenshots/screenshot-2.png)
 
 ## 🚀 Quick Start
 
