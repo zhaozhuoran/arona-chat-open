@@ -7,6 +7,7 @@ interface ImportMetaEnv {
   /** Set in preview/PR builds only. Allows frontend-only preview login; never present in production. */
   readonly VITE_PREVIEW_PASSWORD?: string;
   readonly VITE_CLERK_USER_PROFILE_URL?: string;
+  readonly VITE_YEARCAKES_ACCOUNT_URL?: string;
 }
 
 interface ImportMeta {

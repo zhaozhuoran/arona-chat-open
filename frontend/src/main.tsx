@@ -57,10 +57,11 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 }
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
+const PREVIEW_PASSWORD = import.meta.env.VITE_PREVIEW_PASSWORD
 
 const rootElement = document.getElementById('root')!;
 
-if (!PUBLISHABLE_KEY) {
+if (!PUBLISHABLE_KEY && !PREVIEW_PASSWORD) {
   createRoot(rootElement).render(
     <div style={{
       height: '100vh',
@@ -85,9 +86,13 @@ if (!PUBLISHABLE_KEY) {
   createRoot(rootElement).render(
     <StrictMode>
       <ErrorBoundary>
-        <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
+        {PUBLISHABLE_KEY ? (
+          <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
+            <App />
+          </ClerkProvider>
+        ) : (
           <App />
-        </ClerkProvider>
+        )}
       </ErrorBoundary>
     </StrictMode>,
   )

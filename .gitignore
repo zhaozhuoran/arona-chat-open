@@ -5,9 +5,13 @@ node_modules/
 **/node_modules/
 
 # Build outputs
+dist/
+**/dist/
 frontend/dist/
 backend/.wrangler/
-shared/dist/
+.wrangler/
+playwright-report/
+test-results/
 coverage/
 *.tsbuildinfo
 
@@ -37,4 +41,3 @@ backend/src/build-info.generated.ts
 
 # TMP
 tmp/
-.kagent

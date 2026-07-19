@@ -31,6 +31,8 @@ import {
   DEFAULT_SYSTEM_PROMPT_SETTING,
   DEFAULT_MODEL_DEFS,
   DEFAULT_PRICING,
+  MODELS_WITHOUT_REASONING,
+  shouldExcludeReasoning,
   AppContext,
   AuthTokenPayload,
   ReasoningEffort,
@@ -198,8 +200,14 @@ import {
   resolveLibraryAccessUrl,
   toChatAttachmentPayload,
   getMessageAttachmentsMap,
-  listSessionMessages
+  listSessionMessages,
+  resolveAiProvider,
+  checkRequestLimits,
+  resolveModelBuiltIn,
+  recordRequestLog,
+  isModelAllowed
 } from "./backend-utils";
+import { getUserLimitsStatus } from "./resource-limits";
 import {
   CHAT_STREAM_JOB_KEY_PREFIX,
   CHAT_STREAM_KEEPALIVE_INTERVAL_MS,
@@ -254,7 +262,7 @@ app.post("/api/chat/stream", async (c) => {
   }
 
   const db = c.env.D1_DB;
-  const activeWorkspaceId = await getActiveWorkspaceId(db);
+  const activeWorkspaceId = await getActiveWorkspaceId(db, auth.sub);
   const logLevel = c.get("logLevel") ?? DEFAULT_LOG_LEVEL;
   let existingSession = await db
     .prepare("SELECT id FROM sessions WHERE id = ? AND workspace_id = ? LIMIT 1")
@@ -263,8 +271,8 @@ app.post("/api/chat/stream", async (c) => {
   if (!existingSession?.id && (newSession || requestSource === "regenerate_message")) {
     const sessionTitle = "New Chat";
     const insertSessionResult = await db
-      .prepare("INSERT OR IGNORE INTO sessions (id, title, created_at, workspace_id) VALUES (?, ?, ?, ?)")
-      .bind(sessionId, sessionTitle, Date.now(), activeWorkspaceId)
+      .prepare("INSERT OR IGNORE INTO sessions (id, title, created_at, workspace_id, user_id) VALUES (?, ?, ?, ?, ?)")
+      .bind(sessionId, sessionTitle, Date.now(), activeWorkspaceId, auth.sub)
       .run();
     if (!insertSessionResult.success) {
       throw new Error("Failed to ensure session.");
@@ -314,8 +322,24 @@ app.post("/api/chat/stream", async (c) => {
     userMessageId = crypto.randomUUID();
   }
 
-  const selectedModel = body.model?.trim() || (await getSelectedModel(db));
-  const chatSettings = await getChatSettings(db);
+  const selectedModelId = body.model?.trim() || (await getSelectedModel(db, auth.sub));
+  if (!auth.isAdmin) {
+    const allowed = await isModelAllowed(db, selectedModelId, auth);
+    if (!allowed) {
+      return c.json({ error: `Model '${selectedModelId}' is not allowed or not supported.` }, 400);
+    }
+  }
+  const providerResolution = await resolveAiProvider(c.env, selectedModelId, auth);
+  const selectedModel = providerResolution.modelName;
+
+  if (providerResolution.isBuiltIn) {
+    const limitCheck = await checkRequestLimits(c.env, auth.sub, auth.isAdmin, true);
+    if (!limitCheck.allowed) {
+      await recordRequestLog(c.env.D1_DB, auth.sub, "chat", "failure");
+      return c.json({ error: limitCheck.error }, 429);
+    }
+  }
+  const chatSettings = await getChatSettings(db, auth.sub);
   const maxOverride = normalizeMaxOutputTokens(String(body.max_output_tokens_override ?? chatSettings.max_output_tokens));
   logInfo("chat.stream_requested", {
     ...buildRequestLogPayload(c),
@@ -442,20 +466,20 @@ app.post("/api/chat/stream", async (c) => {
   const openRouterMessages: OpenRouterMessage[] = await Promise.all(
     historyItems.map(async (item) => ({
       role: item.role,
-      content: await buildOpenRouterMessageContent(c, item.role, item.content, item.attachments, attachmentMetaById),
+      content: await buildOpenRouterMessageContent(c, item.role, item.content, item.attachments, attachmentMetaById, "url"),
     })),
   );
 
   openRouterMessages.unshift({
     role: "system",
-    content: await buildInjectedSystemPrompt(db, c.env),
+    content: await buildInjectedSystemPrompt(db, c.env, auth.sub),
   });
 
   const hasPdfAttachment = historyItems.some((item) =>
     item.attachments.some((attachment) => normalizeMimeType(attachment.mime_type) === "application/pdf"),
   );
 
-  const apiEndpoint = c.env.API_ENDPOINT || "https://openrouter.ai/api/v1/chat/completions";
+  const apiEndpoint = providerResolution.endpoint;
   const useChatCompletionsApi = isChatCompletionsEndpoint(apiEndpoint);
   const responseInput = openRouterMessages.map((item) => ({
     type: "message" as const,
@@ -472,14 +496,17 @@ app.post("/api/chat/stream", async (c) => {
     });
   }
   
+  const isReasoningExcluded = shouldExcludeReasoning(selectedModelId, selectedModel);
+  const includeReasoningField = !isReasoningExcluded && chatSettings.reasoning_effort && chatSettings.reasoning_effort !== "default";
+
   const upstreamRequestBody = useChatCompletionsApi
     ? {
         model: selectedModel,
         messages: openRouterMessages,
         stream: true,
-        max_tokens: maxOverride,
-        service_tier: chatSettings.service_tier,
-        reasoning: { effort: chatSettings.reasoning_effort },
+        ...(!chatSettings.disable_max_output_tokens ? { max_tokens: maxOverride } : {}),
+        ...(providerResolution.isBuiltIn ? { service_tier: chatSettings.service_tier } : {}),
+        ...(includeReasoningField ? { reasoning: { effort: chatSettings.reasoning_effort } } : {}),
         ...(tools.length > 0 ? { tools, tool_choice: "auto" } : {}),
         ...(plugins.length > 0 ? { plugins } : {}),
       }
@@ -487,9 +514,9 @@ app.post("/api/chat/stream", async (c) => {
         model: selectedModel,
         input: responseInput,
         stream: true,
-        max_output_tokens: maxOverride,
-        service_tier: chatSettings.service_tier,
-        reasoning: { effort: chatSettings.reasoning_effort },
+        ...(!chatSettings.disable_max_output_tokens ? { max_output_tokens: maxOverride } : {}),
+        ...(providerResolution.isBuiltIn ? { service_tier: chatSettings.service_tier } : {}),
+        ...(includeReasoningField ? { reasoning: { effort: chatSettings.reasoning_effort } } : {}),
         ...(plugins.length > 0 ? { plugins } : {}),
       };
   if (logLevel === "TRACE") {
@@ -502,28 +529,46 @@ app.post("/api/chat/stream", async (c) => {
     });
   }
 
+  const attachmentMetaByIdRecord: Record<string, AttachmentModelMeta> = {};
+  for (const [key, val] of attachmentMetaById.entries()) {
+    attachmentMetaByIdRecord[key] = val;
+  }
+
   const durableObjectId = c.env.CHAT_SESSION_DO.idFromName(sessionId);
   const stub = c.env.CHAT_SESSION_DO.get(durableObjectId);
-  const submitResponse = await stub.fetch("https://chat-session.internal/jobs/submit", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      session_id: sessionId,
-      user_id: auth.sub,
-      user_message_id: userMessageId,
-      user_message: message,
-      new_session: newSession,
-      client_request_id: clientRequestId || null,
-      open_router_messages: openRouterMessages,
-      upstream_request_body: upstreamRequestBody,
-      selected_model: selectedModel,
-      chat_settings: chatSettings,
-      use_chat_completions_api: useChatCompletionsApi,
-      api_endpoint: apiEndpoint,
-      request_url: c.req.url,
-    }),
-  });
+  let submitResponse: Response;
+  try {
+    submitResponse = await stub.fetch("https://chat-session.internal/jobs/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: sessionId,
+        user_id: auth.sub,
+        user_message_id: userMessageId,
+        user_message: message,
+        new_session: newSession,
+        client_request_id: clientRequestId || null,
+        open_router_messages: openRouterMessages,
+        upstream_request_body: upstreamRequestBody,
+        selected_model: selectedModel,
+        chat_settings: chatSettings,
+        use_chat_completions_api: useChatCompletionsApi,
+        api_endpoint: apiEndpoint,
+        api_key: providerResolution.apiKey,
+        request_url: c.req.url,
+        is_admin: auth.isAdmin,
+        is_built_in: providerResolution.isBuiltIn,
+        history_items: historyItems,
+        attachment_meta_by_id: attachmentMetaByIdRecord,
+      }),
+    });
+  } catch (error) {
+    await recordRequestLog(c.env.D1_DB, auth.sub, "chat", "failure");
+    throw error;
+  }
+
   if (!submitResponse.ok) {
+    await recordRequestLog(c.env.D1_DB, auth.sub, "chat", "failure");
     const reason = await submitResponse.text();
     logError("chat.stream_submit_failed", {
       ...buildRequestLogPayload(c),
@@ -536,6 +581,7 @@ app.post("/api/chat/stream", async (c) => {
     });
   }
   const submitPayload = await submitResponse.json<Record<string, unknown>>();
+  await recordRequestLog(c.env.D1_DB, auth.sub, "chat", "success");
   return c.json({
     session_id: sessionId,
     user_message_id: userMessageId,
@@ -580,7 +626,7 @@ app.get("/api/chat/stream/recovery", async (c) => {
   }
 
   const db = c.env.D1_DB;
-  const activeWorkspaceId = await getActiveWorkspaceId(db);
+  const activeWorkspaceId = await getActiveWorkspaceId(db, auth.sub);
   const existingSession = await db
     .prepare("SELECT id FROM sessions WHERE id = ? AND workspace_id = ? LIMIT 1")
     .bind(sessionId, activeWorkspaceId)
@@ -622,7 +668,7 @@ app.get("/api/stats/usage", async (c) => {
   }
   const hasSessionFilter = Boolean(sessionId);
   if (hasSessionFilter) {
-    const activeWorkspaceId = await getActiveWorkspaceId(db);
+    const activeWorkspaceId = await getActiveWorkspaceId(db, auth.sub);
     const existingSession = await db
       .prepare("SELECT id FROM sessions WHERE id = ? AND workspace_id = ? LIMIT 1")
       .bind(sessionId as string, activeWorkspaceId)
@@ -631,8 +677,8 @@ app.get("/api/stats/usage", async (c) => {
       return c.json({ error: "Session not found in active workspace." }, 404);
     }
   }
-  const whereClauses: string[] = [];
-  const whereBindings: Array<string | number> = [];
+  const whereClauses: string[] = ["user_id = ?"];
+  const whereBindings: Array<string | number> = [auth.sub];
   if (hasSessionFilter) {
     whereClauses.push("session_id = ?");
     whereBindings.push(sessionId as string);
@@ -645,9 +691,9 @@ app.get("/api/stats/usage", async (c) => {
   }
   const whereSql = whereClauses.length > 0 ? ` WHERE ${whereClauses.join(" AND ")}` : "";
 
-  // If no filters (all-time usage requested), use cached values from user_profile to save D1 read lines.
-  if (whereClauses.length === 0) {
-    const profile = await readProfile(c);
+  // If no filters beyond user_id (all-time usage requested), use cached values from profile to save D1 read lines.
+  if (whereClauses.length === 1) {
+    const profile = await readProfile(c, auth.sub, auth.isAdmin);
     const summary: UsageSummary = {
       total_requests: profile.total_requests ?? 0,
       total_prompt_tokens: profile.total_prompt_tokens ?? 0,
@@ -659,7 +705,8 @@ app.get("/api/stats/usage", async (c) => {
         cost_usd: Number(item.cost_usd.toFixed(8)),
       })),
     };
-    return c.json({ summary });
+    const limits = await getUserLimitsStatus(c, auth.sub, auth.isAdmin);
+    return c.json({ summary, limits });
   }
 
   const totalStatement = db.prepare(
@@ -692,5 +739,6 @@ app.get("/api/stats/usage", async (c) => {
     })),
   };
 
-  return c.json({ summary });
+  const limits = await getUserLimitsStatus(c, auth.sub, auth.isAdmin);
+  return c.json({ summary, limits });
 });

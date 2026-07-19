@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { ChangeEvent, ClipboardEvent, DragEvent, FormEvent, KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { FileText, FolderOpen, LoaderCircle, Paperclip, RefreshCw, Send, X } from "lucide-react";
+import { ArrowUp, FileText, FolderOpen, LoaderCircle, Paperclip, Plus, RefreshCw, Send, X } from "lucide-react";
 import { useStore } from "../store/useStore";
 import type { ComposerAttachment } from "../store/useStore";
 
@@ -29,8 +29,9 @@ export const ChatInputArea = () => {
   const fileRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { sendingMessage, sendMessage, uploadAttachment, pushToast, sendShortcut, conversationLibraryEnabled, libraryItems, libraryLoading, refreshLibrary } =
+  const { theme, sendingMessage, sendMessage, uploadAttachment, pushToast, sendShortcut, conversationLibraryEnabled, libraryItems, libraryLoading, refreshLibrary } =
     useStore(useShallow((state) => ({
+      theme: state.profile?.theme || "ethereal-light",
       sendingMessage: state.sendingMessage,
       sendMessage: state.sendMessage,
       uploadAttachment: state.uploadAttachment,
@@ -230,6 +231,8 @@ export const ChatInputArea = () => {
     };
   }, []);
 
+  const isEthereal = theme === "ethereal-light";
+
   return (
     <div className="ba-composer-shell">
       {composerAttachments.length > 0 && (
@@ -287,14 +290,14 @@ export const ChatInputArea = () => {
           aria-label={conversationLibraryEnabled ? "Attachment actions" : "Upload attachment"}
           disabled={sendingMessage}
         >
-          <Paperclip size={18} />
+          {isEthereal ? <Plus size={20} /> : <Paperclip size={18} />}
         </button>
 
         <input ref={fileRef} type="file" className="ba-hidden-file-input" onChange={handleFileChange} multiple />
 
         <textarea
           ref={textareaRef}
-          className="ba-composer-input"
+          className={`ba-composer-input ${isEthereal ? "hide-scrollbar-if-small" : ""}`}
           placeholder="Message Arona..."
           aria-label="Message Arona"
           rows={1}
@@ -311,7 +314,13 @@ export const ChatInputArea = () => {
           disabled={sendingMessage || hasUploadingAttachment || (!input.trim() && readyAttachments.length === 0)}
           aria-label={sendingMessage ? "Sending" : "Send"}
         >
-          {sendingMessage ? <LoaderCircle size={18} className="ba-spinner-inline" /> : <Send size={18} />}
+          {sendingMessage ? (
+            <LoaderCircle size={18} className="ba-spinner-inline" />
+          ) : isEthereal ? (
+            <ArrowUp size={20} />
+          ) : (
+            <Send size={18} />
+          )}
         </button>
       </form>
       {conversationLibraryEnabled && attachmentMenuOpen ? (
@@ -396,9 +405,11 @@ export const ChatInputArea = () => {
             document.body,
           )
         : null}
-      <p className="ba-composer-hint">
-        {sendShortcut === "ctrl_enter" ? "Enter for newline, Ctrl/⌘ + Enter to send." : "Enter to send, Shift + Enter for newline."}
-      </p>
+      {theme !== "ethereal-light" && (
+        <p className="ba-composer-hint">
+          {sendShortcut === "ctrl_enter" ? "Enter for newline, Ctrl/⌘ + Enter to send." : "Enter to send, Shift + Enter for newline."}
+        </p>
+      )}
     </div>
   );
 };

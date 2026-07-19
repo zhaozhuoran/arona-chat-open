@@ -55,11 +55,16 @@ export interface Attachment {
   created_at: number;
 }
 
+export type AppTheme = "standard" | "ethereal-light";
+
 export interface UserProfile {
   username: string;
   avatar_key: string | null;
   avatar_url: string | null;
   dynamic_background: boolean;
+  theme: AppTheme;
+  arona_bubble_style?: "none" | "border";
+  ethereal_streaming_style?: "typewriter" | "buffered";
   send_shortcut: "ctrl_enter" | "enter";
   conversation_library_enabled: boolean;
   updated_at: number;
@@ -71,7 +76,7 @@ export interface UserProfile {
   by_model?: UsageModelBreakdown[];
 }
 
-export type ReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
+export type ReasoningEffort = "default" | "minimal" | "low" | "medium" | "high" | "xhigh";
 export type LogLevel = "INFO" | "TRACE";
 export type ServiceTier = "flex" | "default" | "priority";
 
@@ -84,6 +89,9 @@ export interface ChatGenerationSettings {
   temporary_daily_budget_date_utc: string | null;
   web_search_enabled: boolean;
   web_search_max_results: number;
+  attachment_mode: "url" | "base64";
+  disable_max_output_tokens: boolean;
+  daily_budget_enabled: boolean;
 }
 
 export interface DailyBudgetStatus {
@@ -116,8 +124,18 @@ export interface ModelPricing {
   output_usd_per_million: number;
 }
 
+export interface UserLimitsStatus {
+  enabled: boolean;
+  max_daily_req: number;
+  current_daily_req: number;
+  max_storage_mb: number;
+  current_storage_mb: number;
+  max_single_file_mb: number;
+}
+
 export interface ModelOption {
   id: string;
+  model_id: string;
   name: string;
   pricing: ModelPricing | null;
 }
@@ -138,4 +156,30 @@ export interface UsageSummary {
   total_tokens: number;
   total_cost_usd: number;
   by_model: UsageModelBreakdown[];
+}
+
+export interface AiProvider {
+  id: string;
+  name: string;
+  endpoint: string;
+  api_key_masked: string;
+  is_built_in: boolean;
+  owner_id: string | null;
+  owner_email: string | null;
+  visibility: "private" | "global";
+  created_at: number;
+  updated_at: number;
+}
+
+export interface AiModel {
+  id: string;
+  provider_id: string;
+  model_id: string;
+  name: string;
+  input_usd_per_million: number;
+  output_usd_per_million: number;
+  is_active: boolean;
+  created_at: number;
+  updated_at: number;
+  provider_name?: string;
 }

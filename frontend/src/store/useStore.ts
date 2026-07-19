@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import type {
+  AiProvider,
+  AiModel,
   ChatGenerationSettings,
   LogLevel,
   Message,
@@ -15,10 +17,25 @@ import type {
   UserProfile,
   Workspace,
   DailyBudgetStatus,
+  UserLimitsStatus,
 } from "@arona-chat/shared";
 import { SESSION_TITLE_MAX_LENGTH } from "../constants/session";
 
 type ToastType = "success" | "error" | "info";
+
+export interface AdminUser {
+  user_id: string;
+  username: string;
+  is_admin: boolean;
+  can_manage_ai: boolean;
+  can_view_all_users: boolean;
+  total_requests: number;
+  total_self_added_requests: number;
+  total_cost_usd: number;
+  total_self_added_cost_usd: number;
+  daily_budget_enabled?: boolean;
+  daily_budget_usd?: number;
+}
 
 export type ToastItem = {
   id: string;
@@ -32,6 +49,9 @@ type ProfileUpdatePayload = {
   username?: string;
   avatar_key?: string | null;
   dynamic_background?: boolean;
+  theme?: "standard" | "ethereal-light";
+  arona_bubble_style?: "none" | "border";
+  ethereal_streaming_style?: "typewriter" | "buffered";
   send_shortcut?: "ctrl_enter" | "enter";
   conversation_library_enabled?: boolean;
 };
@@ -57,9 +77,15 @@ interface Store {
   authenticated: boolean;
   authMethod: AuthMethod;
   token: string | null;
+  isAdmin: boolean;
+  canManageAi: boolean;
+  canViewAllUsers: boolean;
+  limitsEnabled: boolean;
   previewMode: boolean;
   backendBuildHash: string;
   backendBuildTime: string;
+  instanceId: string;
+  schemaVersion: number;
 
   sessions: Session[];
   sessionsHasMore: boolean;
@@ -70,6 +96,7 @@ interface Store {
   sendingMessage: boolean;
   streamingMessage: string;
   streamingReasoning: string;
+  streamingThinkingTopic: string;
   streamRecovery: StreamRecoveryState | null;
   streamFailure: StreamFailureState | null;
 
@@ -77,6 +104,7 @@ interface Store {
   usage: UsageSummary | null;
   dailyUsage: UsageSummary | null;
   dailyUsageDate: string | null;
+  userLimits: UserLimitsStatus | null;
   sessionUsage: {
     total_tokens: number;
     total_cost_usd: number;
@@ -89,6 +117,7 @@ interface Store {
   logLevel: LogLevel;
   systemPromptTimezone: string;
   showArchivedSessions: boolean;
+  apiCallMode: "sdk" | "fetch";
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
   attachmentLibrary: AttachmentLibraryItem[];
@@ -96,14 +125,26 @@ interface Store {
   libraryItems: LibraryItem[];
   libraryLoading: boolean;
 
+  aiProviders: AiProvider[];
+  aiProvidersLoading: boolean;
+  aiModels: AiModel[];
+  aiModelsLoading: boolean;
+  encryptionKeyReady: boolean;
+
+  adminUsers: AdminUser[];
+  adminUsersLoading: boolean;
+
   toasts: ToastItem[];
   pushToast: (message: string, type?: ToastType) => void;
   dismissToast: (id: string) => void;
 
-  initialize: (clerkToken?: string | null) => Promise<void>;
+  clerkGetToken: ((options?: { template?: string; skipCache?: boolean }) => Promise<string | null>) | null;
+  refreshClerkToken: (force?: boolean) => Promise<string | null>;
+  initialize: (getToken?: ((options?: { template?: string; skipCache?: boolean }) => Promise<string | null>) | null) => Promise<void>;
   setToken: (token: string | null) => void;
   accessDenied: boolean;
-  setAccessDenied: (denied: boolean) => void;
+  accessDeniedMessage: string | null;
+  setAccessDenied: (denied: boolean, message?: string | null) => void;
   loginWithPassword: (password: string) => Promise<void>;
   loginWithPasskey: () => Promise<void>;
   loginWithPreviewPassword: () => void;
@@ -132,6 +173,7 @@ interface Store {
   setLogLevel: (level: LogLevel) => Promise<void>;
   setSystemPromptTimezone: (timezone: string) => Promise<void>;
   setShowArchivedSessions: (show: boolean) => Promise<void>;
+  setApiCallMode: (mode: "sdk" | "fetch") => Promise<void>;
   refreshWorkspaces: (includeArchived?: boolean) => Promise<void>;
   createWorkspace: (name: string) => Promise<void>;
   renameWorkspace: (workspaceId: string, name: string) => Promise<void>;
@@ -152,11 +194,26 @@ interface Store {
   refreshLibrary: () => Promise<void>;
   uploadLibraryFile: (file: File) => Promise<LibraryItem>;
   deleteLibraryItem: (fileId: string) => Promise<void>;
+
+  refreshAiProviders: () => Promise<void>;
+  createAiProvider: (payload: { name: string; endpoint: string; api_key: string; visibility?: string }) => Promise<void>;
+  updateAiProvider: (id: string, payload: { name?: string; endpoint?: string; api_key?: string; visibility?: string }) => Promise<void>;
+  deleteAiProvider: (id: string) => Promise<void>;
+
+  refreshAdminUsers: () => Promise<void>;
+  updateUserPermissions: (userId: string, payload: { can_manage_ai?: boolean; can_view_all_users?: boolean }) => Promise<void>;
+  updateUserBudget: (userId: string, payload: { daily_budget_enabled?: boolean; daily_budget_usd?: number }) => Promise<void>;
+
+  refreshAiModels: () => Promise<void>;
+  createAiModel: (payload: { provider_id: string; model_id: string; name: string; input_usd_per_million?: number; output_usd_per_million?: number }) => Promise<void>;
+  updateAiModel: (id: string, payload: Partial<AiModel>) => Promise<void>;
+  deleteAiModel: (id: string) => Promise<void>;
+  fetchUpstreamModels: () => Promise<{ data: { id: string; name: string; pricing?: { prompt?: number; input?: number; completion?: number; output?: number } }[] }>;
 }
 
 type RequestInitWithAuth = RequestInit & { token?: string | null };
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8787";
+const API_URL = (typeof import.meta !== "undefined" && import.meta.env ? import.meta.env.VITE_API_URL : undefined) || "http://localhost:8787";
 const TOKEN_STORAGE_KEY = "arona-chat.auth-token";
 const PREVIEW_MODE_STORAGE_KEY = "arona-chat.preview-mode";
 /** Delay per chunk when simulating streaming in preview mode, chosen to feel like a real stream. */
@@ -171,13 +228,16 @@ export const SERVICE_TIER_MULTIPLIERS: Record<string, number> = {
 };
 const DEFAULT_CHAT_SETTINGS: ChatGenerationSettings = {
   service_tier: "default",
-  reasoning_effort: "medium",
+  reasoning_effort: "default",
   max_output_tokens: 9000,
   daily_budget_usd: 4,
   temporary_daily_budget_usd: null,
   temporary_daily_budget_date_utc: null,
   web_search_enabled: false,
   web_search_max_results: 5,
+  attachment_mode: "url",
+  disable_max_output_tokens: false,
+  daily_budget_enabled: true,
 };
 const DEFAULT_LOG_LEVEL: LogLevel = "INFO";
 const DEFAULT_BACKEND_BUILD_HASH = "unknown";
@@ -196,7 +256,7 @@ const STREAM_EVENT_POLL_MAX_AGE_MS = 120_000;
 // ---------------------------------------------------------------------------
 
 /** Returns true when this is a preview build with VITE_PREVIEW_PASSWORD embedded. */
-export const isPreviewAvailable = (): boolean => Boolean(import.meta.env.VITE_PREVIEW_PASSWORD?.trim());
+export const isPreviewAvailable = (): boolean => Boolean(typeof import.meta !== "undefined" && import.meta.env ? import.meta.env.VITE_PREVIEW_PASSWORD?.trim() : undefined);
 
 const PREVIEW_SESSION_ID_1 = "preview-s1";
 const PREVIEW_SESSION_ID_2 = "preview-s2";
@@ -206,6 +266,9 @@ const PREVIEW_MOCK_PROFILE: UserProfile = {
   avatar_key: null,
   avatar_url: null,
   dynamic_background: true,
+  theme: "ethereal-light",
+  arona_bubble_style: "none",
+  ethereal_streaming_style: "typewriter",
   send_shortcut: "ctrl_enter",
   conversation_library_enabled: true,
   updated_at: Date.now(),
@@ -245,10 +308,10 @@ const buildPreviewMessages = (): Record<string, Message[]> => {
 };
 
 const PREVIEW_MOCK_MODELS: ModelOption[] = [
-  { id: "openrouter/auto", name: "Auto (OpenRouter)", pricing: null },
-  { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", pricing: { input_usd_per_million: 3, output_usd_per_million: 15 } },
-  { id: "openai/gpt-4o", name: "GPT-4o", pricing: { input_usd_per_million: 2.5, output_usd_per_million: 10 } },
-  { id: "google/gemini-2.0-flash-001", name: "Gemini 2.0 Flash", pricing: { input_usd_per_million: 0.1, output_usd_per_million: 0.4 } },
+  { id: "openrouter/auto", model_id: "openrouter/auto", name: "Auto (OpenRouter)", pricing: null },
+  { id: "anthropic/claude-3.5-sonnet", model_id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", pricing: { input_usd_per_million: 3, output_usd_per_million: 15 } },
+  { id: "openai/gpt-4o", model_id: "openai/gpt-4o", name: "GPT-4o", pricing: { input_usd_per_million: 2.5, output_usd_per_million: 10 } },
+  { id: "google/gemini-2.0-flash-001", model_id: "google/gemini-2.0-flash-001", name: "Gemini 2.0 Flash", pricing: { input_usd_per_million: 0.1, output_usd_per_million: 0.4 } },
 ];
 
 const PREVIEW_MOCK_USAGE: UsageSummary = {
@@ -261,6 +324,15 @@ const PREVIEW_MOCK_USAGE: UsageSummary = {
     { model: "openrouter/auto", requests: 8, prompt_tokens: 5200, completion_tokens: 2800, total_tokens: 8000, cost_usd: 0.0188 },
     { model: "anthropic/claude-3.5-sonnet", requests: 4, prompt_tokens: 3220, completion_tokens: 1380, total_tokens: 4600, cost_usd: 0.0124 },
   ],
+};
+
+const PREVIEW_MOCK_LIMITS: UserLimitsStatus = {
+  enabled: true,
+  max_daily_req: 50,
+  current_daily_req: 12,
+  max_storage_mb: 100,
+  current_storage_mb: 32.5,
+  max_single_file_mb: 25,
 };
 
 const PREVIEW_RESPONSE_TEXTS = [
@@ -287,10 +359,10 @@ const traceClientLog = (logLevel: LogLevel, event: string, payload: Record<strin
 };
 
 const normalizeReasoningEffort = (value: unknown): ReasoningEffort => {
-  if (value === "minimal" || value === "low" || value === "medium" || value === "high" || value === "xhigh") {
-    return value;
+  if (value === "default" || value === "minimal" || value === "low" || value === "medium" || value === "high" || value === "xhigh") {
+    return value as ReasoningEffort;
   }
-  return "medium";
+  return "default";
 };
 
 const normalizeTemporaryDailyBudgetUsd = (value: unknown): number | null => {
@@ -312,7 +384,10 @@ const normalizeServiceTier = (value: unknown): ServiceTier => {
 
 const normalizeChatSettings = (value: Partial<ChatGenerationSettings> | null | undefined): ChatGenerationSettings => {
   const maxOutputTokensRaw = Number(value?.max_output_tokens);
-  const maxOutputTokens = Number.isFinite(maxOutputTokensRaw) ? Math.min(64000, Math.max(1, Math.round(maxOutputTokensRaw))) : 9000;
+  let maxOutputTokens = Number.isFinite(maxOutputTokensRaw) ? Math.min(64000, Math.max(1, Math.round(maxOutputTokensRaw))) : 9216;
+  if (maxOutputTokens >= 1024) {
+    maxOutputTokens = Math.round(maxOutputTokens / 1024) * 1024;
+  }
   const maxResultsRaw = Number(value?.web_search_max_results);
   const maxResults = Number.isFinite(maxResultsRaw) ? Math.min(25, Math.max(1, Math.round(maxResultsRaw))) : 5;
   const temporaryBudget = normalizeTemporaryDailyBudgetUsd(value?.temporary_daily_budget_usd);
@@ -327,6 +402,9 @@ const normalizeChatSettings = (value: Partial<ChatGenerationSettings> | null | u
     temporary_daily_budget_date_utc: temporaryBudgetActive ? temporaryDate : null,
     web_search_enabled: Boolean(value?.web_search_enabled),
     web_search_max_results: maxResults,
+    attachment_mode: value?.attachment_mode === "base64" ? "base64" : "url",
+    disable_max_output_tokens: value?.disable_max_output_tokens !== undefined ? Boolean(value.disable_max_output_tokens) : false,
+    daily_budget_enabled: value?.daily_budget_enabled !== undefined ? Boolean(value.daily_budget_enabled) : true,
   };
 };
 
@@ -340,6 +418,17 @@ const calcBudgetStatus = (
 ): DailyBudgetStatus => {
   const dateUtc = getCurrentUtcDate();
   const spent = Number(usage?.total_cost_usd ?? 0);
+  const enabled = settings.daily_budget_enabled ?? true;
+  if (!enabled) {
+    return {
+      date_utc: dateUtc,
+      budget_usd: Infinity,
+      spent_usd: spent,
+      remaining_usd: Infinity,
+      selected_model_output_usd_per_million: null,
+      available_output_tokens: null,
+    };
+  }
   const temporaryBudgetActive = settings.temporary_daily_budget_usd !== null;
   const budget = Number(temporaryBudgetActive ? settings.temporary_daily_budget_usd : (settings.daily_budget_usd ?? 4));
   const remaining = Math.max(0, budget - spent);
@@ -369,12 +458,18 @@ const resolveMaxOutputTokensOverride = (
   settings: ChatGenerationSettings,
   budgetStatus: DailyBudgetStatus,
 ): number => {
-  const configuredMax = Math.max(1, Math.min(64000, Math.round(Number(settings.max_output_tokens) || 9000)));
+  const configuredMax = Math.max(1, Math.min(64000, Math.round(Number(settings.max_output_tokens) || 9216)));
   const availableMax = budgetStatus.available_output_tokens;
+  let resultVal: number;
   if (!Number.isFinite(availableMax)) {
-    return configuredMax;
+    resultVal = configuredMax;
+  } else {
+    resultVal = Math.max(1, Math.min(configuredMax, Math.round(availableMax)));
   }
-  return Math.max(1, Math.min(configuredMax, Math.round(availableMax)));
+  if (resultVal < 1024) {
+    return resultVal;
+  }
+  return Math.round(resultVal / 1024) * 1024;
 };
 
 const resolveAttachmentType = (mimeType: string): MessageAttachmentType => {
@@ -409,16 +504,28 @@ const parseApiError = async (response: Response): Promise<string> => {
   return response.statusText || `HTTP ${response.status}`;
 };
 
-const requestJson = async <T>(path: string, init: RequestInitWithAuth = {}): Promise<T> => {
+const requestJson = async <T>(path: string, init: RequestInitWithAuth = {}, retry = true): Promise<T> => {
+  let currentToken = init.token;
+  if (!currentToken) {
+    currentToken = await useStore.getState().refreshClerkToken(false);
+  }
+
   const headers = new Headers(init.headers);
-  if (init.token) {
-    headers.set("Authorization", `Bearer ${init.token}`);
+  if (currentToken) {
+    headers.set("Authorization", `Bearer ${currentToken}`);
   }
 
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     headers,
   });
+
+  if (response.status === 401 && retry) {
+    const nextToken = await useStore.getState().refreshClerkToken(true);
+    if (nextToken) {
+      return requestJson(path, { ...init, token: nextToken }, false);
+    }
+  }
 
   if (!response.ok) {
     throw new Error(await parseApiError(response));
@@ -427,12 +534,15 @@ const requestJson = async <T>(path: string, init: RequestInitWithAuth = {}): Pro
   return (await response.json()) as T;
 };
 
-const hashFileSha256 = async (file: File): Promise<string> => {
-  const buffer = await file.arrayBuffer();
-  const hash = await crypto.subtle.digest("SHA-256", buffer);
-  return Array.from(new Uint8Array(hash))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+const cancelUploadSession = async (sessionId: string, token: string | null): Promise<void> => {
+  try {
+    await fetch(`${API_URL}/api/upload-sessions/${encodeURIComponent(sessionId)}/cancel`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  } catch {
+    // best-effort cleanup; ignore network errors
+  }
 };
 
 const uploadFileWithRetry = async (
@@ -442,6 +552,7 @@ const uploadFileWithRetry = async (
   token: string | null,
   onProgress?: (percent: number) => void,
   maxRetries = 3,
+  retryAuth = true,
 ): Promise<Response> => {
   let lastError: unknown;
   const isPresignedUrl = (() => {
@@ -464,9 +575,14 @@ const uploadFileWithRetry = async (
         "Content-Type": mimeType,
       };
 
+      let currentToken = token;
+      if (!isPresignedUrl && !currentToken) {
+        currentToken = await useStore.getState().refreshClerkToken(false);
+      }
+
       // Do NOT send Authorization header to direct R2 presigned URLs
-      if (!isPresignedUrl && token) {
-        headers["Authorization"] = `Bearer ${token}`;
+      if (!isPresignedUrl && currentToken) {
+        headers["Authorization"] = `Bearer ${currentToken}`;
       }
 
       const response = onProgress && !isPresignedUrl
@@ -501,6 +617,13 @@ const uploadFileWithRetry = async (
       if (response.ok) {
         onProgress?.(100);
         return response;
+      }
+
+      if (response.status === 401 && retryAuth && !isPresignedUrl) {
+        const nextToken = await useStore.getState().refreshClerkToken(true);
+        if (nextToken) {
+          return uploadFileWithRetry(url, file, mimeType, nextToken, onProgress, maxRetries, false);
+        }
       }
 
       // Only retry on 5xx or network errors
@@ -773,7 +896,7 @@ const waitForAssistantMessage = async (
   throw new Error("Timed out waiting for the assistant response.");
 };
 
-const fetchSessionMessages = async (token: string, sessionId: string): Promise<Message[]> => {
+const fetchSessionMessages = async (token: string | null, sessionId: string): Promise<Message[]> => {
   const data = await requestJson<{ messages: Message[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/messages`, {
     method: "GET",
     token,
@@ -781,13 +904,22 @@ const fetchSessionMessages = async (token: string, sessionId: string): Promise<M
   return data.messages || [];
 };
 
-const fetchStreamRecovery = async (token: string, sessionId: string): Promise<StreamRecoveryLookupResponse | null> => {
+const fetchStreamRecovery = async (token: string | null, sessionId: string, retry = true): Promise<StreamRecoveryLookupResponse | null> => {
+  let currentToken = token;
+  if (!currentToken) {
+    currentToken = await useStore.getState().refreshClerkToken(false);
+  }
+
   const response = await fetch(`${API_URL}/api/chat/stream/recovery?session_id=${encodeURIComponent(sessionId)}`, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers: currentToken ? { Authorization: `Bearer ${currentToken}` } : {},
   });
+  if (response.status === 401 && retry) {
+    const nextToken = await useStore.getState().refreshClerkToken(true);
+    if (nextToken) {
+      return fetchStreamRecovery(nextToken, sessionId, false);
+    }
+  }
   if (response.status === 404) {
     return null;
   }
@@ -857,7 +989,7 @@ const buildStreamFailureState = (
 });
 
 const consumeChatStream = async (
-  tokenOrFn: string | (() => string | null),
+  token: string | null,
   sessionId: string,
   jobId: string,
   initialCursor: string,
@@ -866,6 +998,7 @@ const consumeChatStream = async (
   onReasoningDelta: (reasoning: string) => void,
   initialContent: string = "",
   initialReasoning: string = "",
+  retry = true,
 ): Promise<{ content: string; reasoning: string; warning: string | null; failure: string | null; userMessageId: string | null; cursor: string }> => {
   const normalizedInitialCursor = normalizeCursorSequence(initialCursor);
   let cursor = normalizedInitialCursor.cursor;
@@ -879,27 +1012,38 @@ const consumeChatStream = async (
   let lastPersistedSequence = lastSequence;
   let lastPersistedUserMessageId: string | null = null;
 
-  // Buffer state for performance
+  // Buffer state for performance (Buffered Rendering Pipeline)
   let bufferedContent = "";
   let bufferedReasoning = "";
   let needsUpdate = false;
-  let updateFrame: number | null = null;
+  let updateTimer: number | null = null;
+  let lastFlushAt = 0;
+  const FLUSH_INTERVAL_MS = 80;
 
   const flushUpdates = () => {
+    if (updateTimer !== null) {
+      window.clearTimeout(updateTimer);
+      updateTimer = null;
+    }
     if (!needsUpdate) return;
     onMessageDelta(bufferedContent);
     onReasoningDelta(bufferedReasoning);
     needsUpdate = false;
-    updateFrame = null;
+    lastFlushAt = Date.now();
   };
 
   const scheduleUpdate = (content: string, reasoning: string) => {
     bufferedContent = content;
     bufferedReasoning = reasoning;
     needsUpdate = true;
-    if (updateFrame === null) {
-      updateFrame = window.requestAnimationFrame(flushUpdates);
-    }
+
+    if (updateTimer !== null) return;
+
+    const now = Date.now();
+    const timeSinceLastFlush = now - lastFlushAt;
+    const delay = Math.max(0, FLUSH_INTERVAL_MS - timeSinceLastFlush);
+
+    updateTimer = window.setTimeout(flushUpdates, delay);
   };
 
   while (!terminal) {
@@ -915,7 +1059,10 @@ const consumeChatStream = async (
     };
 
     try {
-      const currentToken = typeof tokenOrFn === "function" ? tokenOrFn() : tokenOrFn;
+      let currentToken = token;
+      if (!currentToken) {
+        currentToken = await useStore.getState().refreshClerkToken(false);
+      }
       if (!currentToken) {
         throw new Error("Authentication token is missing.");
       }
@@ -949,6 +1096,25 @@ const consumeChatStream = async (
           reject(error);
         });
       });
+
+      if (response.status === 401 && retry) {
+        const nextToken = await useStore.getState().refreshClerkToken(true);
+        if (nextToken) {
+          return consumeChatStream(
+            nextToken,
+            sessionId,
+            jobId,
+            cursor,
+            logLevel,
+            onMessageDelta,
+            onReasoningDelta,
+            streamedContent,
+            streamedReasoning,
+            false,
+          );
+        }
+      }
+
       if (!response.ok) {
         throw new Error(await parseApiError(response));
       }
@@ -1025,7 +1191,11 @@ const consumeChatStream = async (
           }
         }
         if (type === "reasoning_delta") {
-          const piece = typeof eventPayload.reasoning_delta === "string" ? eventPayload.reasoning_delta : "";
+          let piece = "";
+          const rawDelta = eventPayload.reasoning_delta !== undefined ? eventPayload.reasoning_delta : payload.reasoning_delta;
+          if (rawDelta !== undefined && rawDelta !== null) {
+            piece = String(rawDelta);
+          }
           if (piece) {
             streamedReasoning += piece;
             scheduleUpdate(streamedContent, streamedReasoning);
@@ -1050,6 +1220,7 @@ const consumeChatStream = async (
         } catch (error) {
           if (controller.signal.aborted || isAbortError(error)) {
             traceClientLog(logLevel, "events.fetch.stalled", { session_id: sessionId, job_id: jobId, cursor });
+            flushUpdates();
             return {
               content: streamedContent,
               reasoning: streamedReasoning,
@@ -1105,6 +1276,7 @@ const consumeChatStream = async (
     }
   }
   traceClientLog(logLevel, "events.done", { session_id: sessionId, job_id: jobId, cursor, content_length: streamedContent.length });
+  flushUpdates();
 
   return {
     content: streamedContent,
@@ -1136,15 +1308,49 @@ const replaceMessageId = (messages: Message[], currentId: string, nextId: string
   return nextMessages;
 };
 
+export const extractLastThinkingTopic = (text: string): string => {
+  if (!text) return "";
+
+  const lines = text.split("\n");
+  let lastTopic = "";
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (trimmed.startsWith("**")) {
+      const closingIdx = trimmed.indexOf("**", 2);
+      if (closingIdx !== -1) {
+        lastTopic = trimmed.slice(2, closingIdx).trim();
+      } else {
+        const hasSubsequentNonEmptyLines = lines.slice(i + 1).some((l) => l.trim().length > 0);
+        if (!hasSubsequentNonEmptyLines) {
+          lastTopic = trimmed.slice(2).trim();
+        }
+      }
+    }
+  }
+
+  if (!lastTopic && text.trim().length > 0) {
+    return "Thinking...";
+  }
+
+  return lastTopic;
+};
+
 export const useStore = create<Store>((set, get) => ({
   authReady: false,
   authLoading: false,
   authenticated: false,
   authMethod: null,
   token: null,
+  isAdmin: false,
+  canManageAi: false,
+  canViewAllUsers: false,
+  limitsEnabled: false,
   previewMode: false,
   backendBuildHash: DEFAULT_BACKEND_BUILD_HASH,
   backendBuildTime: DEFAULT_BACKEND_BUILD_TIME,
+  instanceId: "",
+  schemaVersion: 0,
 
   sessions: [],
   sessionsHasMore: false,
@@ -1155,6 +1361,7 @@ export const useStore = create<Store>((set, get) => ({
   sendingMessage: false,
   streamingMessage: "",
   streamingReasoning: "",
+    streamingThinkingTopic: "",
   streamRecovery: null,
   streamFailure: null,
 
@@ -1162,6 +1369,7 @@ export const useStore = create<Store>((set, get) => ({
   usage: null,
   dailyUsage: null,
   dailyUsageDate: null,
+  userLimits: null,
   sessionUsage: ZERO_SESSION_USAGE,
   passkeys: [],
   models: [],
@@ -1171,6 +1379,7 @@ export const useStore = create<Store>((set, get) => ({
   logLevel: DEFAULT_LOG_LEVEL,
   systemPromptTimezone: "UTC",
   showArchivedSessions: false,
+  apiCallMode: "fetch",
   workspaces: [],
   activeWorkspaceId: null,
   attachmentLibrary: [],
@@ -1190,12 +1399,45 @@ export const useStore = create<Store>((set, get) => ({
     set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) }));
   },
 
-  accessDenied: false,
-  setAccessDenied: (denied) => set({ accessDenied: denied }),
-  setToken: (token) => set({ token }),
+  clerkGetToken: null,
+  refreshClerkToken: async (force = false) => {
+    const { clerkGetToken } = get();
+    if (!clerkGetToken) {
+      // Fallback for E2E tests: return token from localStorage if clerk is not initialized
+      const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+      if (token) {
+        set({ token });
+      }
+      return token;
+    }
+    try {
+      const token = await clerkGetToken({ skipCache: force });
+      set({ token });
+      if (token) {
+        localStorage.setItem(TOKEN_STORAGE_KEY, token);
+      }
+      return token;
+    } catch (error) {
+      console.error("Failed to refresh Clerk token", error);
+      return null;
+    }
+  },
 
-  initialize: async (clerkToken) => {
-    set({ authLoading: true });
+  accessDenied: false,
+  accessDeniedMessage: null,
+  setAccessDenied: (denied, message = null) => set({ accessDenied: denied, accessDeniedMessage: message }),
+  setToken: (token) => set({ token }),
+  aiProviders: [],
+  aiProvidersLoading: false,
+  aiModels: [],
+  aiModelsLoading: false,
+  encryptionKeyReady: false,
+
+  adminUsers: [],
+  adminUsersLoading: false,
+
+  initialize: async (clerkGetToken) => {
+    set({ authLoading: true, clerkGetToken: clerkGetToken ?? null });
 
     // Restore preview session (sessionStorage flag set by loginWithPreviewPassword)
     if (isPreviewAvailable() && sessionStorage.getItem(PREVIEW_MODE_STORAGE_KEY) === "1") {
@@ -1212,20 +1454,25 @@ export const useStore = create<Store>((set, get) => ({
         authMethod: "preview",
         token: null,
         previewMode: true,
+        isAdmin: true,
         backendBuildHash: "preview",
         backendBuildTime: "",
+        instanceId: "preview-user",
+        schemaVersion: 20,
         profile: { ...PREVIEW_MOCK_PROFILE, updated_at: Date.now() },
         sessions: mockSessions,
         models: PREVIEW_MOCK_MODELS,
         usage: PREVIEW_MOCK_USAGE,
         dailyUsage: PREVIEW_MOCK_USAGE,
         dailyUsageDate: getCurrentUtcDate(),
+        userLimits: PREVIEW_MOCK_LIMITS,
         selectedModel: DEFAULT_MODEL,
         titleModel: DEFAULT_MODEL,
         chatSettings: DEFAULT_CHAT_SETTINGS,
         logLevel: DEFAULT_LOG_LEVEL,
         systemPromptTimezone: "UTC",
         showArchivedSessions: false,
+        apiCallMode: "fetch",
         workspaces: [{ id: "default", name: "Default Workspace", archived_at: null, created_at: Date.now(), updated_at: Date.now() }],
         activeWorkspaceId: "default",
         passkeys: [],
@@ -1236,12 +1483,62 @@ export const useStore = create<Store>((set, get) => ({
         attachmentLibraryLoading: false,
         libraryItems: [],
         libraryLoading: false,
+        aiProviders: [
+          {
+            id: 'preview-provider-uuid',
+            name: 'Preview Provider',
+            endpoint: 'https://api.openai.com/v1',
+            api_key_masked: 'sk-preview-123...def',
+            is_built_in: false,
+            owner_id: null,
+            owner_email: null,
+            visibility: 'private',
+            created_at: Date.now(),
+            updated_at: Date.now(),
+          },
+          {
+            id: 'preview-error-provider',
+            name: 'Error Provider',
+            endpoint: 'https://api.example.com',
+            api_key_masked: 'Decrypt Error',
+            is_built_in: false,
+            owner_id: null,
+            owner_email: null,
+            visibility: 'private',
+            created_at: Date.now(),
+            updated_at: Date.now(),
+          }
+        ],
+        aiProvidersLoading: false,
+        aiModels: [
+          {
+            id: 'preview-model-uuid',
+            provider_id: 'preview-provider-uuid',
+            model_id: 'openai/gpt-4o',
+            name: 'GPT-4o (Preview)',
+            input_usd_per_million: 2.5,
+            output_usd_per_million: 10,
+            is_active: true,
+            created_at: Date.now(),
+            updated_at: Date.now(),
+            provider_name: 'Preview Provider',
+          }
+        ],
+        aiModelsLoading: false,
+        encryptionKeyReady: true,
         streamFailure: null,
       });
       return;
     }
 
-    const effectiveToken = clerkToken || localStorage.getItem(TOKEN_STORAGE_KEY);
+    let effectiveToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (clerkGetToken) {
+      try {
+        effectiveToken = await clerkGetToken();
+      } catch (error) {
+        console.error("Failed to get Clerk token during initialize", error);
+      }
+    }
 
     if (!effectiveToken) {
       set({
@@ -1257,6 +1554,9 @@ export const useStore = create<Store>((set, get) => ({
     try {
       const me = await requestJson<{
         method: AuthMethod;
+        is_admin?: boolean;
+        can_manage_ai?: boolean;
+        can_view_all_users?: boolean;
         profile: UserProfile;
         selected_model: string;
         title_model: string;
@@ -1265,27 +1565,41 @@ export const useStore = create<Store>((set, get) => ({
         system_prompt_timezone?: string;
         show_archived_sessions?: boolean;
         active_workspace_id?: string;
+        api_call_mode?: "sdk" | "fetch";
         backend_build_hash?: string;
         backend_build_time?: string;
+        instance_id?: string;
+        schema_version?: number | string;
+        limits_enabled?: boolean;
+        limits?: UserLimitsStatus | null;
       }>("/api/auth/me", { method: "GET", token: effectiveToken });
 
       set({
         token: effectiveToken,
         authenticated: true,
         authMethod: me.method,
+        isAdmin: Boolean(me.is_admin),
+        canManageAi: Boolean(me.can_manage_ai),
+        canViewAllUsers: Boolean(me.can_view_all_users),
+        limitsEnabled: Boolean(me.limits_enabled),
         accessDenied: false,
+        accessDeniedMessage: null,
         backendBuildHash: typeof me.backend_build_hash === "string" && me.backend_build_hash.trim()
           ? me.backend_build_hash.trim()
           : DEFAULT_BACKEND_BUILD_HASH,
         backendBuildTime: typeof me.backend_build_time === "string" ? me.backend_build_time.trim() : DEFAULT_BACKEND_BUILD_TIME,
         profile: me.profile,
+        instanceId: me.instance_id || "",
+        schemaVersion: Number(me.schema_version) || 0,
         selectedModel: me.selected_model || DEFAULT_MODEL,
         titleModel: me.title_model || me.selected_model || DEFAULT_MODEL,
         chatSettings: normalizeChatSettings(me.chat_settings),
         logLevel: normalizeLogLevel(me.log_level),
         systemPromptTimezone: typeof me.system_prompt_timezone === "string" && me.system_prompt_timezone.trim() ? me.system_prompt_timezone : "UTC",
         showArchivedSessions: Boolean(me.show_archived_sessions),
+        apiCallMode: me.api_call_mode || "fetch",
         activeWorkspaceId: typeof me.active_workspace_id === "string" && me.active_workspace_id.trim() ? me.active_workspace_id : null,
+        userLimits: me.limits || null,
       });
 
       await Promise.all([
@@ -1294,21 +1608,29 @@ export const useStore = create<Store>((set, get) => ({
         get().refreshUsage(),
         get().refreshSessionUsage(),
         get().refreshModels(),
+        get().refreshAiProviders(),
+        get().refreshAiModels(),
         get().refreshPasskeys(),
       ]);
       warnBudget(get());
     } catch (error) {
       const errorMessage = getErrorMessage(error);
-      if (errorMessage.includes("Access Denied")) {
-        set({ accessDenied: true });
+      if (errorMessage.includes("Access Denied") || errorMessage.includes("whitelist")) {
+        set({ accessDenied: true, accessDeniedMessage: errorMessage });
       }
       localStorage.removeItem(TOKEN_STORAGE_KEY);
       set({
         token: null,
         authenticated: false,
         authMethod: null,
+        isAdmin: false,
+        canManageAi: false,
+        canViewAllUsers: false,
+        limitsEnabled: false,
         backendBuildHash: DEFAULT_BACKEND_BUILD_HASH,
         backendBuildTime: DEFAULT_BACKEND_BUILD_TIME,
+      instanceId: "",
+      schemaVersion: 0,
         sessions: [],
         sessionId: null,
         messages: [],
@@ -1325,6 +1647,9 @@ export const useStore = create<Store>((set, get) => ({
         showArchivedSessions: false,
         workspaces: [],
         activeWorkspaceId: null,
+      aiProviders: [],
+        aiModels: [],
+        adminUsers: [],
         streamFailure: null,
       });
       console.error(error);
@@ -1444,14 +1769,18 @@ export const useStore = create<Store>((set, get) => ({
       authMethod: "preview",
       token: null,
       previewMode: true,
+      isAdmin: true,
       backendBuildHash: "preview",
       backendBuildTime: "",
+      instanceId: "preview-user",
+      schemaVersion: 20,
       profile: { ...PREVIEW_MOCK_PROFILE, updated_at: Date.now() },
       sessions: mockSessions,
       models: PREVIEW_MOCK_MODELS,
       usage: PREVIEW_MOCK_USAGE,
       dailyUsage: PREVIEW_MOCK_USAGE,
       dailyUsageDate: getCurrentUtcDate(),
+      userLimits: PREVIEW_MOCK_LIMITS,
       selectedModel: DEFAULT_MODEL,
       titleModel: DEFAULT_MODEL,
       chatSettings: DEFAULT_CHAT_SETTINGS,
@@ -1468,6 +1797,13 @@ export const useStore = create<Store>((set, get) => ({
       attachmentLibraryLoading: false,
       libraryItems: [],
       libraryLoading: false,
+      aiProviders: [],
+      aiProvidersLoading: false,
+      aiModels: [],
+      aiModelsLoading: false,
+      encryptionKeyReady: false,
+      adminUsers: [],
+      adminUsersLoading: false,
       streamRecovery: null,
       streamFailure: null,
     });
@@ -1485,11 +1821,14 @@ export const useStore = create<Store>((set, get) => ({
       previewMode: false,
       backendBuildHash: DEFAULT_BACKEND_BUILD_HASH,
       backendBuildTime: DEFAULT_BACKEND_BUILD_TIME,
+      instanceId: "",
+      schemaVersion: 0,
       sessions: [],
       sessionId: null,
       messages: [],
       streamingMessage: "",
       streamingReasoning: "",
+      streamingThinkingTopic: "",
       loadingMessages: false,
       sendingMessage: false,
       profile: null,
@@ -1511,6 +1850,15 @@ export const useStore = create<Store>((set, get) => ({
       attachmentLibraryLoading: false,
       libraryItems: [],
       libraryLoading: false,
+      aiProviders: [],
+      aiModels: [],
+      encryptionKeyReady: false,
+      adminUsers: [],
+      adminUsersLoading: false,
+      isAdmin: false,
+      canManageAi: false,
+      canViewAllUsers: false,
+      limitsEnabled: false,
       streamRecovery: null,
       streamFailure: null,
     });
@@ -1566,6 +1914,7 @@ export const useStore = create<Store>((set, get) => ({
         loadingMessages: false,
         streamingMessage: "",
         streamingReasoning: "",
+        streamingThinkingTopic: "",
         sessionUsage: ZERO_SESSION_USAGE,
         streamRecovery: null,
         streamFailure: null,
@@ -1606,13 +1955,17 @@ export const useStore = create<Store>((set, get) => ({
           const resumeCursor = normalizeCursorSequence(inflight.cursor);
           const cursorToUse = (currentContent || currentReasoning) ? resumeCursor.cursor : "";
           const streamResult = await consumeChatStream(
-            () => get().token,
+            get().token,
             sessionId,
             inflight.job_id,
             cursorToUse,
             get().logLevel,
-            (nextContent) => set({ streamingMessage: nextContent }),
-            (nextReasoning) => set({ streamingReasoning: nextReasoning }),
+            (nextContent) => {
+              if (get().sessionId === sessionId) set({ streamingMessage: nextContent });
+            },
+            (nextReasoning) => {
+              if (get().sessionId === sessionId) set({ streamingReasoning: nextReasoning, streamingThinkingTopic: extractLastThinkingTopic(nextReasoning) });
+            },
             currentContent,
             currentReasoning,
           );
@@ -1803,7 +2156,15 @@ export const useStore = create<Store>((set, get) => ({
         created_at: Date.now(),
         model: null,
       };
-      set((state) => ({ sendingMessage: true, streamingMessage: "", streamingReasoning: "", streamFailure: null, streamRecovery: null, messages: [...state.messages, userMessage] }));
+      set((state) => ({
+        sendingMessage: true,
+        streamingMessage: "",
+        streamingReasoning: "",
+        streamingThinkingTopic: "",
+        streamFailure: null,
+        streamRecovery: null,
+        messages: [...state.messages, userMessage]
+      }));
       try {
         const responseText = PREVIEW_RESPONSE_TEXTS[Math.floor(Math.random() * PREVIEW_RESPONSE_TEXTS.length)];
         let streamed = "";
@@ -1865,6 +2226,7 @@ export const useStore = create<Store>((set, get) => ({
       sendingMessage: true,
       streamingMessage: "",
       streamingReasoning: "",
+      streamingThinkingTopic: "",
       streamRecovery: null,
       messages: [...state.messages, userMessage],
     }));
@@ -1919,13 +2281,17 @@ export const useStore = create<Store>((set, get) => ({
         created_at: Date.now(),
       });
       const streamResult = await consumeChatStream(
-        () => get().token,
+        get().token,
         sessionId,
         jobId,
         streamCursor,
         get().logLevel,
-        (nextContent) => set({ streamingMessage: nextContent }),
-        (nextReasoning) => set({ streamingReasoning: nextReasoning }),
+        (nextContent) => {
+          if (get().sessionId === sessionId) set({ streamingMessage: nextContent });
+        },
+        (nextReasoning) => {
+          if (get().sessionId === sessionId) set({ streamingReasoning: nextReasoning, streamingThinkingTopic: extractLastThinkingTopic(nextReasoning) });
+        },
         get().streamingMessage,
         get().streamingReasoning,
       );
@@ -1981,6 +2347,7 @@ export const useStore = create<Store>((set, get) => ({
         ],
         streamingMessage: "",
         streamingReasoning: "",
+        streamingThinkingTopic: "",
         streamFailure: null,
         sendingMessage: false, // Set sendingMessage to false atomically with messages update
       }));
@@ -1998,7 +2365,7 @@ export const useStore = create<Store>((set, get) => ({
     } catch (error) {
       persistInflightStream(sessionId, null);
       get().pushToast(getErrorMessage(error), "error");
-      set({ streamingMessage: "", streamingReasoning: "", streamFailure: null, streamRecovery: null, sendingMessage: false });
+      set({ streamingMessage: "", streamingReasoning: "", streamingThinkingTopic: "", streamFailure: null, streamRecovery: null, sendingMessage: false });
       throw error;
     } finally {
       // sendingMessage is now handled in successful set or catch set
@@ -2049,13 +2416,16 @@ export const useStore = create<Store>((set, get) => ({
       return;
     }
 
+    const filteredMessages = messages.slice(0, lastVisibleMessage.role === "assistant" ? lastVisibleIndex : lastVisibleIndex + 1);
+
     set({
       sendingMessage: true,
       streamingMessage: "",
       streamingReasoning: "",
+      streamingThinkingTopic: "",
       streamFailure: null,
       streamRecovery: null,
-      messages,
+      messages: filteredMessages,
     });
 
     if (get().previewMode) {
@@ -2089,6 +2459,7 @@ export const useStore = create<Store>((set, get) => ({
           messages: [...state.messages, assistantMessage],
           streamingMessage: "",
           streamingReasoning: "",
+          streamingThinkingTopic: "",
           sessionUsage: { total_tokens: state.sessionUsage.total_tokens + 50, total_cost_usd: state.sessionUsage.total_cost_usd + 0.0001 },
         }));
         const finalMessages = get().messages.filter((message) => message.session_id === sessionId);
@@ -2156,13 +2527,17 @@ export const useStore = create<Store>((set, get) => ({
         created_at: Date.now(),
       });
       const streamResult = await consumeChatStream(
-        () => get().token,
+        get().token,
         sessionId,
         submit.job_id,
         normalizedSubmitCursor.cursor,
         get().logLevel,
-        (nextContent) => set({ streamingMessage: nextContent }),
-        (nextReasoning) => set({ streamingReasoning: nextReasoning }),
+        (nextContent) => {
+          if (get().sessionId === sessionId) set({ streamingMessage: nextContent });
+        },
+        (nextReasoning) => {
+          if (get().sessionId === sessionId) set({ streamingReasoning: nextReasoning, streamingThinkingTopic: extractLastThinkingTopic(nextReasoning) });
+        },
         get().streamingMessage,
         get().streamingReasoning,
       );
@@ -2201,15 +2576,19 @@ export const useStore = create<Store>((set, get) => ({
         reasoning_summary: streamResult.reasoning.trim() || null,
       };
 
-      set((state) => ({
-        messages: [
-          ...replaceMessageId(state.messages, sourceUserMessage.id, persistedUserMessageId),
-          assistantMessage,
-        ],
-        streamingMessage: "",
-        streamingReasoning: "",
-        streamFailure: null,
-      }));
+      set((state) => {
+        const nextMessages = replaceMessageId(state.messages, sourceUserMessage!.id, persistedUserMessageId);
+        return {
+          messages: [
+            ...nextMessages,
+            assistantMessage,
+          ],
+          streamingMessage: "",
+          streamingReasoning: "",
+          streamingThinkingTopic: "",
+          streamFailure: null,
+        };
+      });
 
       await get().refreshUsage();
       await get().refreshSessionUsage(sessionId);
@@ -2219,7 +2598,7 @@ export const useStore = create<Store>((set, get) => ({
     } catch (error) {
       persistInflightStream(sessionId, null);
       get().pushToast(`Failed to regenerate message: ${getErrorMessage(error)}`, "error");
-      set({ streamingMessage: "", streamingReasoning: "", streamFailure: null, streamRecovery: null });
+      set({ streamingMessage: "", streamingReasoning: "", streamingThinkingTopic: "", streamFailure: null, streamRecovery: null });
       throw error;
     } finally {
       set({ sendingMessage: false });
@@ -2246,13 +2625,17 @@ export const useStore = create<Store>((set, get) => ({
       const resumeCursor = normalizeCursorSequence(recovery.cursor);
       const cursorToUse = (currentContent || currentReasoning) ? resumeCursor.cursor : "";
       const streamResult = await consumeChatStream(
-        () => get().token,
+        get().token,
         recovery.session_id,
         recovery.job_id,
         cursorToUse,
         get().logLevel,
-        (nextContent) => set({ streamingMessage: nextContent }),
-        (nextReasoning) => set({ streamingReasoning: nextReasoning }),
+        (nextContent) => {
+          if (get().sessionId === recovery.session_id) set({ streamingMessage: nextContent });
+        },
+        (nextReasoning) => {
+          if (get().sessionId === recovery.session_id) set({ streamingReasoning: nextReasoning, streamingThinkingTopic: extractLastThinkingTopic(nextReasoning) });
+        },
         currentContent,
         currentReasoning,
       );
@@ -2307,6 +2690,7 @@ export const useStore = create<Store>((set, get) => ({
         messages: refreshedMessages,
         streamingMessage: "",
         streamingReasoning: "",
+        streamingThinkingTopic: "",
         streamRecovery: null,
         streamFailure: null,
       });
@@ -2343,6 +2727,7 @@ export const useStore = create<Store>((set, get) => ({
       streamRecovery: { ...recovery, mode: "waiting", last_error: null },
       streamingMessage: "",
       streamingReasoning: "",
+      streamingThinkingTopic: "",
       streamFailure: null,
     });
     try {
@@ -2358,6 +2743,7 @@ export const useStore = create<Store>((set, get) => ({
         messages: refreshedMessages,
         streamingMessage: "",
         streamingReasoning: "",
+        streamingThinkingTopic: "",
         streamFailure: null,
         streamRecovery: null,
       });
@@ -2412,26 +2798,169 @@ export const useStore = create<Store>((set, get) => ({
     const token = ensureToken(get().token);
     const squareAvatar = await cropImageToSquare(file);
     const mimeType = squareAvatar.type || "application/octet-stream";
-    const presign = await requestJson<{
-      upload_url: string;
-      object_key: string;
-    }>("/api/profile/avatar/presign", {
-      method: "POST",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        fileName: squareAvatar.name,
-        mimeType,
-      }),
-    });
+    const session = await requestJson<{ session_id: string; upload_url: string; object_key: string }>(
+      "/api/upload-sessions",
+      {
+        method: "POST",
+        token,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          intended_type: "avatar",
+          file_name: squareAvatar.name,
+          mime_type: mimeType,
+          size: squareAvatar.size,
+        }),
+      },
+    );
 
-    const upload = await uploadFileWithRetry(presign.upload_url, squareAvatar, mimeType, token);
+    const upload = await uploadFileWithRetry(session.upload_url, squareAvatar, mimeType, token);
     if (!upload.ok) {
+      await cancelUploadSession(session.session_id, token);
       throw new Error(`Avatar upload failed: ${upload.statusText}`);
     }
 
-    await get().updateProfile({ avatar_key: presign.object_key });
+    const confirm = await requestJson<{ id: string }>(
+      `/api/upload-sessions/${session.session_id}/confirm`,
+      { method: "POST", token },
+    );
+    await get().updateProfile({ avatar_key: confirm.id });
     get().pushToast("Avatar updated.", "success");
+  },
+
+  refreshAiProviders: async () => {
+    if (get().previewMode) return;
+    const token = ensureToken(get().token);
+    set({ aiProvidersLoading: true });
+    try {
+      const data = await requestJson<{ providers: AiProvider[]; encryption_key_ready: boolean }>("/api/settings/ai-providers", { method: "GET", token });
+      set({ aiProviders: data.providers, encryptionKeyReady: data.encryption_key_ready });
+    } finally {
+      set({ aiProvidersLoading: false });
+    }
+  },
+
+  createAiProvider: async (payload) => {
+    const token = ensureToken(get().token);
+    await requestJson("/api/settings/ai-providers", {
+      method: "POST",
+      token,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    await get().refreshAiProviders();
+    get().pushToast("AI Provider created.", "success");
+  },
+
+  updateAiProvider: async (id, payload) => {
+    const token = ensureToken(get().token);
+    await requestJson(`/api/settings/ai-providers/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      token,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    await get().refreshAiProviders();
+    get().pushToast("AI Provider updated.", "success");
+  },
+
+  deleteAiProvider: async (id) => {
+    const token = ensureToken(get().token);
+    await requestJson(`/api/settings/ai-providers/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      token,
+    });
+    await get().refreshAiProviders();
+    get().pushToast("AI Provider deleted.", "success");
+  },
+
+  refreshAiModels: async () => {
+    if (get().previewMode) return;
+    const token = ensureToken(get().token);
+    set({ aiModelsLoading: true });
+    try {
+      const data = await requestJson<{ models: AiModel[] }>("/api/settings/ai-models", { method: "GET", token });
+      set({ aiModels: data.models });
+    } finally {
+      set({ aiModelsLoading: false });
+    }
+  },
+
+  createAiModel: async (payload) => {
+    const token = ensureToken(get().token);
+    await requestJson("/api/settings/ai-models", {
+      method: "POST",
+      token,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    await get().refreshAiModels();
+    await get().refreshModels();
+    get().pushToast("AI Model added.", "success");
+  },
+
+  updateAiModel: async (id, payload) => {
+    const token = ensureToken(get().token);
+    await requestJson(`/api/settings/ai-models/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      token,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    await get().refreshAiModels();
+    await get().refreshModels();
+    get().pushToast("AI Model updated.", "success");
+  },
+
+  deleteAiModel: async (id) => {
+    const token = ensureToken(get().token);
+    await requestJson(`/api/settings/ai-models/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      token,
+    });
+    await get().refreshAiModels();
+    await get().refreshModels();
+    get().pushToast("AI Model deleted.", "success");
+  },
+
+  fetchUpstreamModels: async () => {
+    const token = ensureToken(get().token);
+    return requestJson("/api/settings/ai-models/upstream", { method: "GET", token });
+  },
+
+  refreshAdminUsers: async () => {
+    if (get().previewMode) return;
+    const token = ensureToken(get().token);
+    set({ adminUsersLoading: true });
+    try {
+      const data = await requestJson<{ users: AdminUser[] }>("/api/admin/users", { method: "GET", token });
+      set({ adminUsers: data.users });
+    } finally {
+      set({ adminUsersLoading: false });
+    }
+  },
+
+  updateUserPermissions: async (userId, payload) => {
+    const token = ensureToken(get().token);
+    await requestJson(`/api/admin/users/${encodeURIComponent(userId)}/permissions`, {
+      method: "PUT",
+      token,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    await get().refreshAdminUsers();
+    get().pushToast("User permissions updated.", "success");
+  },
+
+  updateUserBudget: async (userId, payload) => {
+    const token = ensureToken(get().token);
+    await requestJson(`/api/admin/users/${encodeURIComponent(userId)}/budget`, {
+      method: "PUT",
+      token,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    await get().refreshAdminUsers();
+    get().pushToast("User budget updated.", "success");
   },
 
   refreshUsage: async () => {
@@ -2441,11 +2970,11 @@ export const useStore = create<Store>((set, get) => ({
     const token = ensureToken(get().token);
     const dateUtc = getCurrentUtcDate();
     const [allData, dailyData] = await Promise.allSettled([
-      requestJson<{ summary: UsageSummary }>("/api/stats/usage", {
+      requestJson<{ summary: UsageSummary; limits?: UserLimitsStatus }>("/api/stats/usage", {
         method: "GET",
         token,
       }),
-      requestJson<{ summary: UsageSummary }>(`/api/stats/usage?date_utc=${encodeURIComponent(dateUtc)}`, {
+      requestJson<{ summary: UsageSummary; limits?: UserLimitsStatus }>(`/api/stats/usage?date_utc=${encodeURIComponent(dateUtc)}`, {
         method: "GET",
         token,
       }),
@@ -2454,16 +2983,23 @@ export const useStore = create<Store>((set, get) => ({
       usage?: UsageSummary;
       dailyUsage?: UsageSummary | null;
       dailyUsageDate?: string | null;
+      userLimits?: UserLimitsStatus | null;
     } = {};
 
     let hasSuccess = false;
     if (allData.status === "fulfilled") {
       next.usage = allData.value.summary;
+      if (allData.value.limits) {
+        next.userLimits = allData.value.limits;
+      }
       hasSuccess = true;
     }
     if (dailyData.status === "fulfilled") {
       next.dailyUsage = dailyData.value.summary;
       next.dailyUsageDate = dateUtc;
+      if (dailyData.value.limits) {
+        next.userLimits = dailyData.value.limits;
+      }
       hasSuccess = true;
     } else {
       next.dailyUsage = null;
@@ -2539,8 +3075,11 @@ export const useStore = create<Store>((set, get) => ({
         system_prompt_timezone?: string;
         show_archived_sessions?: boolean;
         active_workspace_id?: string;
+        api_call_mode?: "sdk" | "fetch";
         backend_build_hash?: string;
         backend_build_time?: string;
+        instance_id?: string;
+        schema_version?: number | string;
       }>("/api/models", { method: "GET", token });
     set({
       models: data.models || [],
@@ -2551,12 +3090,15 @@ export const useStore = create<Store>((set, get) => ({
       systemPromptTimezone:
         typeof data.system_prompt_timezone === "string" && data.system_prompt_timezone.trim() ? data.system_prompt_timezone : "UTC",
       showArchivedSessions: Boolean(data.show_archived_sessions),
+      apiCallMode: data.api_call_mode || "fetch",
       activeWorkspaceId:
         typeof data.active_workspace_id === "string" && data.active_workspace_id.trim() ? data.active_workspace_id : get().activeWorkspaceId,
       backendBuildHash: typeof data.backend_build_hash === "string" && data.backend_build_hash.trim()
         ? data.backend_build_hash.trim()
         : get().backendBuildHash,
       backendBuildTime: typeof data.backend_build_time === "string" ? data.backend_build_time.trim() : get().backendBuildTime,
+      instanceId: data.instance_id || get().instanceId,
+      schemaVersion: Number(data.schema_version) || get().schemaVersion,
     });
   },
 
@@ -2661,6 +3203,22 @@ export const useStore = create<Store>((set, get) => ({
     });
     set({ showArchivedSessions: Boolean(data.show_archived_sessions) });
     await get().refreshSessions();
+  },
+
+  setApiCallMode: async (mode) => {
+    if (get().previewMode) {
+      set({ apiCallMode: mode });
+      return;
+    }
+    const token = ensureToken(get().token);
+    const data = await requestJson<{ api_call_mode: "sdk" | "fetch" }>("/api/settings/api-call-mode", {
+      method: "PUT",
+      token,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_call_mode: mode }),
+    });
+    set({ apiCallMode: data.api_call_mode });
+    get().pushToast(`AI API calling mode switched to ${mode === "sdk" ? "Vercel AI SDK" : "Standard"}.`, "success");
   },
 
   refreshWorkspaces: async (includeArchived = true) => {
@@ -2882,9 +3440,14 @@ export const useStore = create<Store>((set, get) => ({
       set({ passkeys: [] });
       return;
     }
-    const token = ensureToken(get().token);
-    const data = await requestJson<{ passkeys: PasskeyInfo[] }>("/api/auth/passkeys", { method: "GET", token });
-    set({ passkeys: data.passkeys || [] });
+    try {
+      const token = ensureToken(get().token);
+      const data = await requestJson<{ passkeys: PasskeyInfo[] }>("/api/auth/passkeys", { method: "GET", token });
+      set({ passkeys: data.passkeys || [] });
+    } catch (error) {
+      console.warn("Failed to refresh passkeys (it might be retired):", error);
+      set({ passkeys: [] });
+    }
   },
 
   registerPasskey: async (nickname) => {
@@ -3042,39 +3605,31 @@ export const useStore = create<Store>((set, get) => ({
     const processedFile = await convertImageToSdrIfPossible(file);
     const mimeType = processedFile.type || file.type || "application/octet-stream";
 
-    const presign = await requestJson<{
-      id: string;
-      upload_url: string;
-      objectKey: string;
-    }>(
-      `/api/library/presign?fileName=${encodeURIComponent(processedFile.name)}&mimeType=${encodeURIComponent(mimeType)}`,
+    const session = await requestJson<{ session_id: string; upload_url: string; object_key: string }>(
+      "/api/upload-sessions",
       {
-        method: "GET",
+        method: "POST",
         token,
-        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          intended_type: "library",
+          file_name: processedFile.name,
+          mime_type: mimeType,
+          size: processedFile.size,
+        }),
       },
     );
 
-    const upload = await uploadFileWithRetry(presign.upload_url, processedFile, mimeType, token);
+    const upload = await uploadFileWithRetry(session.upload_url, processedFile, mimeType, token);
     if (!upload.ok) {
+      await cancelUploadSession(session.session_id, token);
       throw new Error(`Library upload failed: ${await parseApiError(upload)}`);
     }
 
-    const metadata = await requestJson<{
-      id: string;
-      access_url: string;
-    }>("/api/library", {
-      method: "POST",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: presign.id,
-        file_name: processedFile.name,
-        mime_type: mimeType,
-        size: processedFile.size,
-        object_key: presign.objectKey,
-      }),
-    });
+    const metadata = await requestJson<{ id: string; access_url: string }>(
+      `/api/upload-sessions/${session.session_id}/confirm`,
+      { method: "POST", token },
+    );
 
     if (!metadata.access_url || !metadata.id) {
       throw new Error("Library file URL is missing.");
@@ -3117,72 +3672,34 @@ export const useStore = create<Store>((set, get) => ({
     const mimeType = processedFile.type || file.type || "application/octet-stream";
 
     onProgress?.(0);
-    const fileHash = await hashFileSha256(processedFile);
 
-    const check = await requestJson<{
-      exists: boolean;
-      data?: {
-        id: string;
-        file_name: string;
-        mime_type: string;
-        size: number;
-        access_url?: string;
-      };
-    }>(`/api/attachments/check?hash=${encodeURIComponent(fileHash)}`, {
-      method: "GET",
-      token,
-    });
-
-    if (check.exists && check.data?.access_url && check.data.id) {
-      const normalizedSize = Number(check.data.size);
-      onProgress?.(100);
-      return {
-        id: check.data.id,
-        file_name: check.data.file_name || processedFile.name,
-        mime_type: check.data.mime_type || mimeType,
-        size: Number.isFinite(normalizedSize) && normalizedSize > 0 ? normalizedSize : processedFile.size,
-        url: check.data.access_url,
-        type: resolveAttachmentType(check.data.mime_type || mimeType),
-      };
-    }
-
-    const presign = await requestJson<{
-      id: string;
-      upload_url: string;
-      objectKey: string;
-      publicUrl?: string;
-    }>(
-      `/api/attachments/presign?fileName=${encodeURIComponent(processedFile.name)}&mimeType=${encodeURIComponent(mimeType)}&conversationId=${encodeURIComponent(get().sessionId ?? "draft")}`,
+    const session = await requestJson<{ session_id: string; upload_url: string; object_key: string }>(
+      "/api/upload-sessions",
       {
-        method: "GET",
+        method: "POST",
         token,
-        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          intended_type: "attachment",
+          file_name: processedFile.name,
+          mime_type: mimeType,
+          size: processedFile.size,
+          conversation_id: get().sessionId ?? "draft",
+        }),
       },
     );
 
-    const upload = await uploadFileWithRetry(presign.upload_url, processedFile, mimeType, token, onProgress);
+    const upload = await uploadFileWithRetry(session.upload_url, processedFile, mimeType, token, onProgress);
     if (!upload.ok) {
+      await cancelUploadSession(session.session_id, token);
       throw new Error(`Attachment upload failed: ${await parseApiError(upload)}`);
     }
 
     onProgress?.(100);
-    const metadata = await requestJson<{
-      id: string;
-      access_url: string;
-    }>("/api/attachments", {
-      method: "POST",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: presign.id,
-        file_hash: fileHash,
-        file_name: processedFile.name,
-        mime_type: mimeType,
-        size: processedFile.size,
-        object_key: presign.objectKey,
-        conversation_id: get().sessionId ?? "draft",
-      }),
-    });
+    const metadata = await requestJson<{ id: string; access_url: string }>(
+      `/api/upload-sessions/${session.session_id}/confirm`,
+      { method: "POST", token },
+    );
     if (!metadata.access_url || !metadata.id) {
       throw new Error("Attachment URL is missing.");
     }

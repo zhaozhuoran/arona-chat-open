@@ -4,6 +4,9 @@
 
 :root {
   color-scheme: light;
+}
+
+.theme-standard {
   --ba-primary: #003153;
   --ba-primary-2: #0f62a6;
   --ba-accent: #77deff;
@@ -15,6 +18,46 @@
   --ba-border: rgba(20, 84, 135, 0.2);
   --ba-glass: rgba(239, 247, 255, 0.9);
   --ba-card: rgba(249, 252, 255, 0.92);
+
+  --app-bg: #edf5ff;
+}
+
+.theme-ethereal-light {
+  /* Neutral Palette */
+  --arona-bg: #F8FAFC;
+  --arona-surface: #FFFFFF;
+  --arona-elevated: #F1F5F9;
+  --arona-subtle: #F8FAFC;
+  --arona-border-soft: #E2E8F0;
+  --arona-border-medium: #CBD5E1;
+  --arona-border-accent: #FF43C8;
+
+  /* Brand & Accent Colors */
+  --arona-accent-primary: #FF43C8;
+  --arona-accent-secondary: #77DEFF;
+  --arona-accent-blue: #1289F9;
+  --arona-soft-pink: #FFF1F8;
+  --arona-soft-blue: #F0F9FF;
+
+  /* Text Colors */
+  --arona-text-p: #0F172A;
+  --arona-text-s: #475569;
+  --arona-text-t: #64748B;
+  --arona-text-on-accent: #FFFFFF;
+
+  /* Semantic Colors */
+  --arona-success: #10B981;
+  --arona-warning: #F59E0B;
+  --arona-error: #EF4444;
+  --arona-info: #3B82F6;
+
+  /* Shadows */
+  --arona-shadow-sm: 0 2px 4px rgba(15, 23, 42, 0.02);
+  --arona-shadow-md: 0 8px 16px -4px rgba(15, 23, 42, 0.04);
+  --arona-shadow-lg: 0 12px 32px -8px rgba(15, 23, 42, 0.08);
+  --arona-shadow-xl: 0 20px 48px -12px rgba(15, 23, 42, 0.12);
+
+  --app-bg: var(--arona-bg);
 }
 
 * {
@@ -46,7 +89,822 @@ body {
     -apple-system,
     sans-serif;
   color: var(--ba-text);
-  background: #edf5ff;
+  background: var(--app-bg);
+  transition: background-color 0.3s ease;
+}
+
+body.theme-ethereal-light {
+  font-family: "Inter", "Nunito Sans", system-ui, sans-serif;
+  color: var(--arona-text-p);
+}
+
+/* Ethereal Light Scrollbars */
+.theme-ethereal-light .ba-session-list::-webkit-scrollbar,
+.theme-ethereal-light .ba-chatlog::-webkit-scrollbar,
+.theme-ethereal-light .ba-settings-content::-webkit-scrollbar,
+.theme-ethereal-light .ba-usage-table::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.theme-ethereal-light .ba-session-list::-webkit-scrollbar-thumb,
+.theme-ethereal-light .ba-chatlog::-webkit-scrollbar-thumb,
+.theme-ethereal-light .ba-settings-content::-webkit-scrollbar-thumb,
+.theme-ethereal-light .ba-usage-table::-webkit-scrollbar-thumb {
+  background: var(--arona-elevated);
+  border-radius: 999px;
+  transition: background 0.2s;
+}
+
+.theme-ethereal-light .ba-session-list::-webkit-scrollbar-thumb:hover,
+.theme-ethereal-light .ba-chatlog::-webkit-scrollbar-thumb:hover,
+.theme-ethereal-light .ba-settings-content::-webkit-scrollbar-thumb:hover,
+.theme-ethereal-light .ba-usage-table::-webkit-scrollbar-thumb:hover {
+  background: var(--arona-border-soft);
+}
+
+/* Sidebar (Knowledge Hub) */
+.theme-ethereal-light .ba-sidebar {
+  background: var(--arona-elevated);
+  border-right: 1px solid var(--arona-border-soft);
+  box-shadow: var(--arona-shadow-sm);
+  padding: 16px;
+  width: min(90vw, 280px);
+}
+
+.theme-ethereal-light .ba-sidebar-profile p {
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-sidebar-profile span {
+  color: var(--arona-text-s);
+}
+
+.theme-ethereal-light .ba-sidebar-actions .ba-primary-btn {
+  background: var(--arona-surface);
+  color: var(--arona-text-p);
+  border: 1px solid var(--arona-border-soft);
+  border-radius: 9999px; /* Capsule pill */
+  box-shadow: var(--arona-shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.theme-ethereal-light .ba-sidebar-actions .ba-primary-btn:hover {
+  border-color: var(--arona-accent-primary);
+  box-shadow: var(--arona-shadow-md);
+  transform: scale(1.01);
+}
+
+.theme-ethereal-light .ba-sidebar-actions .ba-primary-btn:active {
+  transform: scale(0.99);
+}
+
+.theme-ethereal-light .ba-sidebar-actions .ba-primary-btn svg {
+  color: var(--arona-accent-primary);
+}
+
+.theme-ethereal-light .ba-secondary-btn {
+  background: transparent;
+  color: var(--arona-text-s);
+  border: none;
+  font-weight: 500;
+}
+
+.theme-ethereal-light .ba-secondary-btn:hover {
+  color: var(--arona-text-p);
+  background: var(--arona-surface);
+  box-shadow: var(--arona-shadow-sm);
+}
+
+.theme-ethereal-light .ba-session-item {
+  border: none;
+  background: transparent;
+  color: var(--arona-text-s);
+  padding: 0;
+  transition: all 0.2s ease;
+  border-radius: 8px;
+}
+
+.theme-ethereal-light .ba-session-item:hover {
+  background: var(--arona-surface);
+  box-shadow: var(--arona-shadow-sm);
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-session-item.is-active {
+  background: var(--arona-soft-blue);
+  color: var(--arona-accent-blue);
+}
+
+.theme-ethereal-light .ba-session-item.is-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 16px;
+  background: var(--arona-accent-secondary);
+  border-radius: 0 4px 4px 0;
+}
+
+/* Top Navigation (Context & Control) */
+.theme-ethereal-light .ba-topbar {
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  border: none;
+  z-index: 25; /* Above sidebar mask */
+}
+
+.theme-ethereal-light .ba-topbar.is-scrolled {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--arona-shadow-sm);
+}
+
+.theme-ethereal-light .ba-topbar-title p {
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-topbar-title span {
+  color: var(--arona-text-s);
+}
+
+.theme-ethereal-light .ba-menu-btn-circular {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border: 1px solid var(--arona-border-soft);
+  color: var(--arona-text-s);
+  box-shadow: var(--arona-shadow-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.theme-ethereal-light .ba-menu-btn-circular:hover {
+  border-color: var(--arona-border-medium);
+  color: var(--arona-text-p);
+  box-shadow: var(--arona-shadow-md);
+}
+
+.theme-ethereal-light .ba-topbar-info span {
+  color: var(--arona-text-s);
+}
+
+.theme-ethereal-light .ba-topbar-info strong {
+  color: var(--arona-text-p);
+}
+
+/* Chat Shell & Log (Gemini-style) */
+.theme-ethereal-light .ba-chat-shell {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  position: relative; /* For absolute composer */
+  overflow: hidden;
+}
+
+.theme-ethereal-light .ba-chatlog {
+  background: transparent;
+  gap: 40px; /* specification gap */
+  padding-bottom: 150px;
+}
+
+.theme-ethereal-light .ba-chat-fade-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  background: linear-gradient(to bottom, var(--arona-bg) 0%, transparent 100%);
+  pointer-events: none;
+  z-index: 8;
+}
+
+.theme-ethereal-light .ba-chat-fade-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  background: linear-gradient(to top, var(--arona-bg) 0%, transparent 100%);
+  pointer-events: none;
+  z-index: 8;
+}
+
+.theme-ethereal-light .ba-message-row {
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.theme-ethereal-light .ba-message {
+  box-shadow: none;
+  border: none;
+  padding: 0;
+  animation: etherealFadeIn 400ms var(--arona-ease-enter);
+}
+
+@keyframes etherealFadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.theme-ethereal-light .ba-message-row.is-user {
+  justify-content: flex-end;
+}
+
+.theme-ethereal-light .ba-message-row.is-assistant {
+  padding: 24px 0;
+  justify-content: flex-start;
+  gap: 16px;
+}
+
+.theme-ethereal-light .ba-message.is-user {
+  background: #ffffff;
+  color: var(--arona-text-p);
+  border: 1px solid #FFD6EC;
+  border-radius: 18px 18px 0 18px;
+  padding: 12px 16px;
+  box-shadow: 0 8px 20px -6px rgba(255, 67, 200, 0.12);
+  max-width: 85%;
+}
+
+.theme-ethereal-light .ba-message.is-assistant {
+  background: transparent;
+  color: var(--arona-text-p);
+  max-width: 100%;
+  transition: all 0.3s ease;
+}
+
+.theme-ethereal-light .ba-message.is-assistant.bubble-style-border {
+  background: white;
+  border: 1px solid var(--arona-border-soft);
+  border-radius: 18px;
+  padding: 12px 16px;
+  box-shadow: var(--arona-shadow-sm);
+}
+
+.theme-ethereal-light .ba-message.is-assistant.bubble-style-none {
+  background: transparent;
+  border: none;
+  padding: 0;
+  box-shadow: none;
+}
+
+.theme-ethereal-light .ba-message-avatar {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--arona-border-soft);
+  box-shadow: var(--arona-shadow-sm);
+  background: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin-top: 0;
+}
+
+.theme-ethereal-light .ba-message-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.theme-ethereal-light .ba-message-actions {
+  justify-content: flex-start;
+  opacity: 1; /* Always show in Ethereal theme */
+  transition: opacity 0.2s ease;
+}
+
+.theme-ethereal-light .ba-message-row:hover .ba-message-actions {
+  opacity: 1;
+}
+
+.theme-ethereal-light .ba-message-label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--arona-accent-blue);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.theme-ethereal-light .ba-message-time {
+  color: var(--arona-text-s);
+}
+
+.theme-ethereal-light .ba-markdown {
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.theme-ethereal-light .ba-markdown a {
+  color: var(--arona-accent-blue);
+  text-decoration: none;
+}
+
+.theme-ethereal-light .ba-markdown a:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.theme-ethereal-light .ba-markdown blockquote {
+  border-left: 3px solid var(--arona-accent-secondary);
+  background: var(--arona-soft-blue);
+  padding: 4px 12px;
+  border-radius: 8px;
+  margin: 0.5rem 0;
+}
+
+.theme-ethereal-light .ba-markdown th {
+  background: var(--arona-elevated);
+}
+
+.theme-ethereal-light .ba-markdown th,
+.theme-ethereal-light .ba-markdown td {
+  border-color: var(--arona-border-soft);
+}
+
+.theme-ethereal-light .ba-markdown code {
+  background: var(--arona-elevated);
+  color: var(--arona-text-p);
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+.theme-ethereal-light .ba-markdown pre {
+  background: var(--arona-elevated);
+  border: 1px solid var(--arona-border-soft);
+  color: var(--arona-text-p);
+}
+
+/* Ethereal Light Custom Pastel Code Syntax Highlighting (Arona Pastel Style) */
+.theme-ethereal-light .hljs-keyword,
+.theme-ethereal-light .hljs-selector-tag,
+.theme-ethereal-light .hljs-meta .hljs-keyword {
+  color: #D946EF; /* Fuchsia */
+  font-weight: 600;
+}
+
+.theme-ethereal-light .hljs-string,
+.theme-ethereal-light .hljs-regexp,
+.theme-ethereal-light .hljs-attribute,
+.theme-ethereal-light .hljs-meta .hljs-string {
+  color: #10B981; /* Emerald */
+}
+
+.theme-ethereal-light .hljs-title,
+.theme-ethereal-light .hljs-section,
+.theme-ethereal-light .hljs-name,
+.theme-ethereal-light .hljs-selector-id,
+.theme-ethereal-light .hljs-selector-class {
+  color: #3B82F6; /* Functional Blue */
+  font-weight: 600;
+}
+
+.theme-ethereal-light .hljs-comment,
+.theme-ethereal-light .hljs-quote,
+.theme-ethereal-light .hljs-meta {
+  color: #94A3B8; /* Slate Gray */
+  font-style: italic;
+}
+
+.theme-ethereal-light .hljs-number,
+.theme-ethereal-light .hljs-symbol,
+.theme-ethereal-light .hljs-bullet,
+.theme-ethereal-light .hljs-type,
+.theme-ethereal-light .hljs-literal,
+.theme-ethereal-light .hljs-link {
+  color: #F59E0B; /* Amber Orange */
+}
+
+.theme-ethereal-light .hljs-params,
+.theme-ethereal-light .hljs-attr,
+.theme-ethereal-light .hljs-variable,
+.theme-ethereal-light .hljs-template-variable {
+  color: #475569; /* Dark Slate body */
+}
+
+.theme-ethereal-light .hljs-built_in,
+.theme-ethereal-light .hljs-class {
+  color: #1289F9;
+}
+
+.theme-ethereal-light .hljs-doctag,
+.theme-ethereal-light .hljs-formula {
+  color: #77DEFF;
+}
+
+.theme-ethereal-light .hljs-emphasis {
+  font-style: italic;
+}
+
+.theme-ethereal-light .hljs-strong {
+  font-weight: bold;
+}
+
+.theme-ethereal-light .ba-markdown.is-streaming {
+  animation: etherealMaterialize 120ms ease-out forwards;
+}
+
+@keyframes etherealMaterialize {
+  from { opacity: 0.85; }
+  to { opacity: 1; }
+}
+
+.ba-buffered-reveal,
+.ba-fade-up {
+  animation: ba-fade-up 0.5s var(--arona-ease-enter) forwards;
+}
+
+@keyframes ba-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Floating Capsule Input */
+.theme-ethereal-light .ba-composer-shell {
+  border: none;
+  background: transparent;
+  backdrop-filter: none;
+  position: absolute;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 800px;
+  padding: 0 16px;
+  z-index: 10;
+}
+
+.theme-ethereal-light .ba-composer {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  border-color: var(--arona-border-soft);
+  border-radius: 28px;
+  box-shadow: var(--arona-shadow-lg);
+  padding: 6px 12px;
+  align-items: center; /* Align items centered instead of flex-end */
+}
+
+.theme-ethereal-light .ba-composer:hover {
+  border-color: var(--arona-border-medium);
+}
+
+.theme-ethereal-light .ba-composer-input {
+  color: var(--arona-text-p);
+  margin: 0 8px;
+}
+
+.theme-ethereal-light .ba-composer-input::placeholder {
+  color: var(--arona-text-s);
+}
+
+.theme-ethereal-light .ba-composer-input.hide-scrollbar-if-small::-webkit-scrollbar {
+  display: none;
+}
+
+.theme-ethereal-light .ba-composer::before {
+  display: none; /* Hide standard BA gloss effect */
+}
+
+.theme-ethereal-light .ba-composer:focus-within {
+  border-color: var(--arona-border-medium);
+  box-shadow: var(--arona-shadow-xl), 0 0 0 2px color-mix(in srgb, var(--arona-accent-primary) 15%, transparent);
+  transform: translateY(-2px);
+}
+
+.theme-ethereal-light .ba-composer-input:focus-visible {
+  outline: none;
+}
+
+.theme-ethereal-light .ba-composer.is-drag-over {
+  background: var(--arona-soft-blue);
+  border: 2px dashed var(--arona-accent-secondary);
+}
+
+.theme-ethereal-light .ba-send-button {
+  background: var(--arona-text-p);
+  color: white;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.theme-ethereal-light .ba-send-button:disabled {
+  background: transparent;
+  color: var(--arona-text-t);
+  opacity: 0.35;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.theme-ethereal-light .ba-send-button:not(:disabled) {
+  background: var(--arona-accent-primary);
+  color: white;
+  box-shadow: 0 4px 12px rgba(255, 67, 200, 0.25);
+}
+
+.theme-ethereal-light .ba-send-button:not(:disabled):hover {
+  transform: scale(1.08);
+  background: var(--arona-accent-primary);
+  box-shadow: 0 6px 16px rgba(255, 67, 200, 0.4);
+}
+
+.theme-ethereal-light .ba-send-button:active {
+  transform: scale(0.95);
+}
+
+.theme-ethereal-light .ba-composer-hint {
+  text-align: center;
+  margin-top: 12px;
+}
+
+/* Settings & Modals */
+.theme-ethereal-light .ba-panel-modal {
+  background: var(--arona-surface);
+  border: 1px solid var(--arona-border-soft);
+  border-radius: 24px;
+  box-shadow: var(--arona-shadow-xl);
+}
+
+.theme-ethereal-light .ba-settings-header p {
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-settings-tab.is-active {
+  color: var(--arona-accent-primary);
+  border-bottom-color: var(--arona-accent-primary);
+}
+
+.theme-ethereal-light .ba-settings-card {
+  background: var(--arona-surface);
+  border: 1px solid var(--arona-border-soft);
+  box-shadow: var(--arona-shadow-sm);
+}
+
+/* Animations Variables */
+:root {
+  --arona-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --arona-ease-enter: cubic-bezier(0, 0.55, 0.45, 1);
+  --arona-ease-exit: cubic-bezier(0.3, 0, 1, 0.5);
+}
+
+@keyframes arona-shimmer {
+  0% { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+.theme-ethereal-light .thinking-title-shimmer {
+  background: linear-gradient(90deg, #94A3B8 25%, #0F172A 50%, #94A3B8 75%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: arona-shimmer 4s infinite linear;
+}
+
+/* Jelly Animation */
+@keyframes ba-jelly {
+  0% { transform: scale(1, 1); }
+  30% { transform: scale(1.25, 0.75); }
+  40% { transform: scale(0.75, 1.25); }
+  50% { transform: scale(1.15, 0.85); }
+  65% { transform: scale(0.95, 1.05); }
+  75% { transform: scale(1.05, 0.95); }
+  100% { transform: scale(1, 1); }
+}
+
+.ba-message-jelly {
+  animation: ba-jelly 0.6s both;
+}
+
+/* Floating Pill Menu */
+.ba-floating-menu {
+  position: fixed;
+  z-index: 1000;
+  background: white;
+  border-radius: 999px;
+  box-shadow: var(--arona-shadow-lg);
+  border: 1px solid var(--arona-border-soft);
+  display: flex;
+  padding: 4px;
+  gap: 2px;
+  animation: ba-menu-enter 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-origin: center;
+  pointer-events: auto;
+}
+
+.ba-floating-menu.is-hiding {
+  animation: ba-menu-exit 0.15s ease-in forwards;
+}
+
+@keyframes ba-menu-enter {
+  from { transform: scale(0.8) translateY(10px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+@keyframes ba-model-menu-enter {
+  from { transform: translateX(-50%) scale(0.95) translateY(-10px); opacity: 0; }
+  to { transform: translateX(-50%) scale(1) translateY(0); opacity: 1; }
+}
+
+.animate-ba-model-enter {
+  animation: ba-model-menu-enter 0.25s var(--arona-ease-enter) forwards;
+}
+
+.ba-scroll-to-bottom-wrap {
+  position: absolute;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  animation: ba-fade-up 0.3s var(--arona-ease-enter) forwards;
+}
+
+.ba-scroll-to-bottom-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: white;
+  border: 1px solid var(--arona-border-soft);
+  box-shadow: var(--arona-shadow-lg);
+  padding: 8px 16px;
+  border-radius: 999px;
+  color: var(--arona-accent-blue);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ba-scroll-to-bottom-btn:hover {
+  transform: translateY(-2px);
+  border-color: var(--arona-accent-blue);
+  box-shadow: var(--arona-shadow-xl);
+}
+
+.ba-scroll-to-bottom-btn:active {
+  transform: translateY(0);
+}
+
+.ba-scroll-to-bottom-icon {
+  font-size: 1rem;
+}
+
+@keyframes ba-menu-exit {
+  from { transform: scale(1); opacity: 1; }
+  to { transform: scale(0.8); opacity: 0; }
+}
+
+.ba-floating-menu-item {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--arona-text-s);
+  transition: all 0.2s;
+  white-space: nowrap;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.ba-floating-menu-item:hover {
+  background: var(--arona-elevated);
+  color: var(--arona-text-p);
+}
+
+.ba-floating-menu-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Ethereal Assistant Interacting Bubble */
+.theme-ethereal-light .ba-message.is-assistant.is-interacting {
+  background: var(--arona-elevated);
+  border-radius: 18px;
+  padding: 12px 16px;
+  margin: -8px -12px;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: var(--arona-shadow-md);
+  border: 1px solid var(--arona-border-soft);
+}
+
+@keyframes topicFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.theme-ethereal-light .ba-thinking-topic {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #D93A70;
+  margin-bottom: 8px;
+  position: relative;
+  animation: topicFadeIn 150ms ease-out forwards;
+}
+
+@keyframes ba-topic-fade-in-fast {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.theme-ethereal-light .ba-thinking-topic span {
+  display: inline;
+  animation: ba-topic-fade-in-fast 0.15s ease-out forwards;
+}
+
+.theme-ethereal-light .ba-thinking-topic.is-streaming::after {
+  content: "";
+  display: none;
+  width: 6px;
+  height: 6px;
+  background: var(--arona-accent-primary);
+  border-radius: 50%;
+  margin-left: 8px;
+  vertical-align: middle;
+  box-shadow: 0 0 6px var(--arona-accent-primary);
+  animation: ba-dot-pulse 1s infinite;
+}
+
+.theme-ethereal-light .ba-markdown.is-streaming {
+  position: relative;
+}
+
+.theme-ethereal-light .ba-markdown.is-streaming > *:last-child::after,
+.theme-ethereal-light .ba-streaming-dot {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  background: var(--arona-accent-primary);
+  margin-left: 3px;
+  vertical-align: -2px;
+  border-radius: 0;
+  box-shadow: 0 0 6px var(--arona-accent-primary);
+}
+
+
+.ba-char-sweep {
+  display: inline;
+}
+
+.theme-ethereal-light .ba-thinking-orb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 6px rgba(119, 222, 255, 0.6));
+  animation: ba-orb-rotate 18s linear infinite;
+}
+
+@keyframes ba-orb-rotate {
+  to { transform: rotate(360deg); }
+}
+
+.theme-ethereal-light :focus-visible {
+  outline: 2px solid var(--arona-accent-primary);
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+
+.theme-ethereal-light .ba-send-button:focus-visible {
+  outline-offset: 3px;
+}
+
+@keyframes ba-dot-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.6; }
+}
+
+.ba-topbar-floating-container {
+  pointer-events: none;
+}
+
+.ba-topbar-floating-container > div {
+  pointer-events: auto;
 }
 
 button,
@@ -84,9 +942,22 @@ select {
   background: url("/ba/shitim/Event_Main_Stage_Bg.png") center center / cover no-repeat;
 }
 
+.theme-ethereal-light .ba-stage-bg {
+  background: none;
+}
+
 .ba-stage-overlay {
   z-index: -3;
   background: linear-gradient(180deg, rgba(248, 252, 255, 0.84), rgba(233, 245, 255, 0.72));
+}
+
+.theme-ethereal-light .ba-stage-overlay {
+  background: linear-gradient(
+    135deg,
+    rgba(248, 250, 252, 1) 0%,
+    rgba(239, 246, 255, 1) 50%,
+    rgba(248, 250, 252, 1) 100%
+  );
 }
 
 .ba-stage-grid {
@@ -98,11 +969,15 @@ select {
   background-size: 120px 120px;
 }
 
-.ba-app.is-dynamic-bg .ba-stage-overlay {
+.theme-ethereal-light .ba-stage-grid {
+  display: none;
+}
+
+.theme-standard .ba-app.is-dynamic-bg .ba-stage-overlay {
   animation: baPulse 8s ease-in-out infinite alternate;
 }
 
-.ba-app.is-dynamic-bg .ba-stage-grid {
+.theme-standard .ba-app.is-dynamic-bg .ba-stage-grid {
   animation: baGrid 12s linear infinite;
 }
 
@@ -212,6 +1087,16 @@ select {
   color: #215278;
   border: 1px solid rgba(143, 196, 231, 0.55);
   background: rgba(235, 247, 255, 0.94);
+}
+
+.ba-settings-action.is-danger {
+  color: #c53030;
+  border-color: #feb2b2;
+  background: #fff5f5;
+}
+
+.ba-settings-action.is-danger:hover {
+  background: #fed7d7;
 }
 
 .ba-session-list {
@@ -544,9 +1429,6 @@ select {
     calc(20px + var(--ba-topbar-scroll-compensation))
     clamp(12px, 2vw, 26px)
     20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
   transition: padding-top 180ms ease;
   background:
     linear-gradient(180deg, rgba(250, 252, 255, 0.95), rgba(238, 247, 255, 0.9)),
@@ -557,6 +1439,16 @@ select {
       transparent 1px,
       transparent 3px
     );
+}
+
+.ba-chatlog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.theme-ethereal-light .ba-chatlog-content {
+  gap: 40px;
 }
 
 .ba-chatlog-empty {
@@ -1340,7 +2232,14 @@ select {
   inset: 0;
   z-index: 20;
   background: rgba(5, 18, 30, 0.58);
+}
+
+.theme-ethereal-light .ba-sidebar-mask {
+  z-index: 24;
   border: 0;
+}
+
+.ba-sidebar-mask {
   opacity: 0;
   pointer-events: none;
   transition: opacity 220ms ease;
@@ -1842,6 +2741,17 @@ select {
   font-size: 0.72rem;
 }
 
+.ba-usage-limit-hint {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 244, 224, 0.92);
+  border: 1px solid rgba(214, 158, 46, 0.4);
+  color: #8a5a12;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
 .ba-usage-summary div {
   border-radius: 8px;
   background: rgba(235, 246, 255, 0.92);
@@ -1900,6 +2810,39 @@ select {
   width: 26%;
   text-align: right;
   white-space: nowrap;
+}
+
+.ba-providers-models-table table {
+  table-layout: auto;
+  min-width: 600px;
+  width: 100%;
+}
+
+.ba-providers-models-table th,
+.ba-providers-models-table td {
+  width: auto !important;
+  text-align: left !important;
+  white-space: normal !important;
+  word-break: break-word;
+  padding: 10px 8px !important;
+}
+
+.ba-providers-models-table th:last-child,
+.ba-providers-models-table td:last-child {
+  text-align: right !important;
+  width: 120px !important;
+  min-width: 120px !important;
+}
+
+@media (max-width: 640px) {
+  .ba-providers-models-table table {
+    min-width: 500px;
+  }
+  .ba-providers-models-table th,
+  .ba-providers-models-table td {
+    padding: 8px 6px !important;
+    font-size: 0.8rem;
+  }
 }
 
 .ba-usage-table th {
@@ -2269,6 +3212,7 @@ select {
     position: relative;
     transform: none;
     flex-shrink: 0;
+    z-index: 6; /* Ensures the sidebar is drawn above .ba-main (z-index: 5) to prevent overflowing text cover bugs */
     transition:
       width 260ms ease,
       padding 260ms ease,
@@ -2391,4 +3335,35 @@ select {
   color: var(--ba-primary);
   text-align: center;
   margin-bottom: 4px;
+}
+
+@media (min-width: 1080px) {
+  .theme-ethereal-light .ba-sidebar.is-open {
+    width: 280px;
+  }
+  .theme-ethereal-light .ba-sidebar:not(.is-open) {
+    width: 0 !important;
+    padding: 16px 0 !important;
+    border-right-width: 0 !important;
+    opacity: 0;
+    pointer-events: none;
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-ethereal-light .thinking-title-shimmer,
+  .theme-ethereal-light .ba-thinking-topic.is-streaming::after,
+  .theme-ethereal-light .ba-markdown.is-streaming > *:last-child::after,
+  .theme-ethereal-light .ba-streaming-dot,
+  .ba-message-jelly,
+  .ba-floating-menu,
+  .ba-buffered-reveal,
+  .ba-fade-up,
+  .theme-ethereal-light .ba-thinking-orb {
+    animation: none !important;
+  }
+  .theme-ethereal-light .ba-message {
+    animation: none !important;
+  }
 }

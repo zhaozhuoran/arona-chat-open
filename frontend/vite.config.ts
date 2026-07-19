@@ -14,6 +14,18 @@ const resolveCommitHash = (): string => {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-clerk': ['@clerk/clerk-react'],
+          'vendor-utils': ['lucide-react', 'classnames', 'tailwind-merge', 'zustand'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 1000,
+  },
   define: {
     'import.meta.env.VITE_BUILD_HASH': JSON.stringify(process.env.VITE_BUILD_HASH || resolveCommitHash()),
     'import.meta.env.VITE_BUILD_TIME': JSON.stringify(process.env.VITE_BUILD_TIME || new Date().toISOString()),

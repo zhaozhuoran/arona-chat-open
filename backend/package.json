@@ -10,7 +10,9 @@
   "dependencies": {
     "@arona-chat/shared": "*",
     "@clerk/backend": "^3.8.4",
+    "@openrouter/ai-sdk-provider": "^3.0.0",
     "@simplewebauthn/server": "^13.1.0",
+    "ai": "^7.0.30",
     "aws4fetch": "^1.0.20",
     "hono": "^4.0.0"
   },

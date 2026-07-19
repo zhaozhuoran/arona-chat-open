@@ -1,18 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { FormEvent, UIEvent } from "react";
 import type { CSSProperties } from "react";
 import { FolderOpen, Menu, MessageSquarePlus, MoreHorizontal, Pin, Settings2, X } from "lucide-react";
-import { AttachmentLibraryPanel } from "./components/AttachmentLibraryPanel";
-import { AuthPanel } from "./components/AuthPanel";
 import { BootLoader } from "./components/BootLoader";
-import { BottomDock } from "./components/BottomDock";
-import { ChatInputArea } from "./components/ChatInputArea";
-import { ChatSession } from "./components/ChatSession";
-import { LibraryPanel } from "./components/LibraryPanel";
-import { SettingsPanel } from "./components/SettingsPanel";
 import { ToastStack } from "./components/ToastStack";
+
+const BottomDock = lazy(() => import("./components/BottomDock").then(m => ({ default: m.BottomDock })));
+const ChatInputArea = lazy(() => import("./components/ChatInputArea").then(m => ({ default: m.ChatInputArea })));
+const ChatSession = lazy(() => import("./components/ChatSession").then(m => ({ default: m.ChatSession })));
 import { SESSION_TITLE_MAX_LENGTH } from "./constants/session";
+
+const AttachmentLibraryPanel = lazy(() => import("./components/AttachmentLibraryPanel").then(m => ({ default: m.AttachmentLibraryPanel })));
+const AuthPanel = lazy(() => import("./components/AuthPanel").then(m => ({ default: m.AuthPanel })));
+const LibraryPanel = lazy(() => import("./components/LibraryPanel").then(m => ({ default: m.LibraryPanel })));
+const SettingsPanel = lazy(() => import("./components/SettingsPanel").then(m => ({ default: m.SettingsPanel })));
 import { useAuth } from "@clerk/clerk-react";
 import { useStore, isPreviewAvailable } from "./store/useStore";
 
@@ -52,10 +54,15 @@ const parseChatRoute = (pathname: string): ChatRoute | null => {
   }
 };
 
+const IS_CLERK_AVAILABLE = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
+
 function App() {
   const [bootComplete, setBootComplete] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.matchMedia("(min-width: 1080px)").matches);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sessionInfoOpen, setSessionInfoOpen] = useState(false);
+  const [topbarVisible, setTopbarVisible] = useState(true);
+  const lastScrollY = useRef(0);
   const [attachmentLibraryOpen, setAttachmentLibraryOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [menuSessionId, setMenuSessionId] = useState<string | null>(null);
@@ -72,18 +79,32 @@ function App() {
   const usageUpdateTimerRef = useRef<number | null>(null);
   const lastUsageUpdateAtRef = useRef(0);
   const routeSyncReadyRef = useRef(false);
+  const modelSelectorRef = useRef<HTMLDivElement>(null);
 
-  const { getToken, signOut } = useAuth();
+  const clerk = IS_CLERK_AVAILABLE ? useAuth() : null;
+  const getToken = clerk?.getToken;
+  const signOut = clerk?.signOut;
+  const clerkIsLoaded = clerk?.isLoaded;
+  const clerkIsSignedIn = clerk?.isSignedIn;
+
+  const lastAuthInitializedRef = useRef<{
+    isLoaded: boolean;
+    isSignedIn: boolean;
+  } | null>(null);
 
   const {
+    theme,
     authReady,
     authLoading,
     authenticated,
     accessDenied,
+    accessDeniedMessage,
     setAccessDenied,
     previewMode,
     backendBuildHash,
     backendBuildTime,
+    instanceId,
+    schemaVersion,
     sessions,
     sessionsHasMore,
     sessionsLoadingMore,
@@ -92,6 +113,7 @@ function App() {
     usage,
     dailyUsage,
     dailyUsageDate,
+    userLimits,
     sessionUsage,
     messages,
     sendingMessage,
@@ -110,9 +132,18 @@ function App() {
     libraryItems,
     libraryLoading,
     toasts,
+    aiProviders,
+    aiProvidersLoading,
+    aiModels,
+    aiModelsLoading,
+    encryptionKeyReady,
+    isAdmin,
+    canManageAi,
+    limitsEnabled,
+    adminUsers,
+    adminUsersLoading,
     initialize,
     loginWithPassword,
-    loginWithPasskey,
     loginWithPreviewPassword,
     logout,
     loadMoreSessions,
@@ -144,19 +175,33 @@ function App() {
     refreshLibrary,
     uploadLibraryFile,
     deleteLibraryItem,
+    refreshAiProviders,
+    createAiProvider,
+    updateAiProvider,
+    deleteAiProvider,
+    refreshAiModels,
+    createAiModel,
+    updateAiModel,
+    deleteAiModel,
+    fetchUpstreamModels,
+    refreshAdminUsers,
+    updateUserPermissions,
+    updateUserBudget,
     dismissToast,
-    setToken,
     pushToast,
   } = useStore(useShallow((state) => ({
-    setToken: state.setToken,
+    theme: state.profile?.theme || "ethereal-light",
     authReady: state.authReady,
     authLoading: state.authLoading,
     authenticated: state.authenticated,
     accessDenied: state.accessDenied,
+    accessDeniedMessage: state.accessDeniedMessage,
     setAccessDenied: state.setAccessDenied,
     previewMode: state.previewMode,
     backendBuildHash: state.backendBuildHash,
     backendBuildTime: state.backendBuildTime,
+    instanceId: state.instanceId,
+    schemaVersion: state.schemaVersion,
     sessions: state.sessions,
     sessionsHasMore: state.sessionsHasMore,
     sessionsLoadingMore: state.sessionsLoadingMore,
@@ -167,6 +212,7 @@ function App() {
     usage: state.usage,
     dailyUsage: state.dailyUsage,
     dailyUsageDate: state.dailyUsageDate,
+    userLimits: state.userLimits,
     sessionUsage: state.sessionUsage,
     messages: state.messages,
     sendingMessage: state.sendingMessage,
@@ -184,10 +230,19 @@ function App() {
     attachmentLibraryLoading: state.attachmentLibraryLoading,
     libraryItems: state.libraryItems,
     libraryLoading: state.libraryLoading,
+    aiProviders: state.aiProviders,
+    aiProvidersLoading: state.aiProvidersLoading,
+    aiModels: state.aiModels,
+    aiModelsLoading: state.aiModelsLoading,
+    encryptionKeyReady: state.encryptionKeyReady,
+    isAdmin: state.isAdmin,
+    canManageAi: state.canManageAi,
+    limitsEnabled: state.limitsEnabled,
+    adminUsers: state.adminUsers,
+    adminUsersLoading: state.adminUsersLoading,
     toasts: state.toasts,
     initialize: state.initialize,
     loginWithPassword: state.loginWithPassword,
-    loginWithPasskey: state.loginWithPasskey,
     loginWithPreviewPassword: state.loginWithPreviewPassword,
     logout: state.logout,
     selectSession: state.selectSession,
@@ -217,36 +272,46 @@ function App() {
     refreshLibrary: state.refreshLibrary,
     uploadLibraryFile: state.uploadLibraryFile,
     deleteLibraryItem: state.deleteLibraryItem,
+    refreshAiProviders: state.refreshAiProviders,
+    createAiProvider: state.createAiProvider,
+    updateAiProvider: state.updateAiProvider,
+    deleteAiProvider: state.deleteAiProvider,
+    refreshAiModels: state.refreshAiModels,
+    createAiModel: state.createAiModel,
+    updateAiModel: state.updateAiModel,
+    deleteAiModel: state.deleteAiModel,
+    fetchUpstreamModels: state.fetchUpstreamModels,
+    refreshAdminUsers: state.refreshAdminUsers,
+    updateUserPermissions: state.updateUserPermissions,
+    updateUserBudget: state.updateUserBudget,
     dismissToast: state.dismissToast,
     pushToast: state.pushToast,
   })));
 
   useEffect(() => {
-    const syncAuth = async () => {
-      const token = await getToken();
-      void initialize(token);
-    };
-    void syncAuth();
-  }, [initialize, getToken]);
+    if (IS_CLERK_AVAILABLE && clerkIsLoaded !== undefined) {
+      if (!clerkIsLoaded) {
+        return;
+      }
+      const currentIsSignedIn = Boolean(clerkIsSignedIn);
+      const prev = lastAuthInitializedRef.current;
+      if (prev && prev.isLoaded && prev.isSignedIn === currentIsSignedIn) {
+        return;
+      }
+      lastAuthInitializedRef.current = { isLoaded: true, isSignedIn: currentIsSignedIn };
+      void initialize(getToken);
+    } else {
+      if (lastAuthInitializedRef.current) {
+        return;
+      }
+      lastAuthInitializedRef.current = { isLoaded: true, isSignedIn: false };
+      void initialize(undefined);
+    }
+  }, [initialize, getToken, clerkIsLoaded, clerkIsSignedIn]);
 
   useEffect(() => {
-    if (!authenticated || previewMode) {
-      return;
-    }
-
-    const interval = setInterval(async () => {
-      try {
-        const token = await getToken();
-        if (token) {
-          setToken(token);
-        }
-      } catch (error) {
-        console.error("Failed to refresh Clerk token:", error);
-      }
-    }, 50000); // 50 seconds
-
-    return () => clearInterval(interval);
-  }, [authenticated, previewMode, getToken, setToken]);
+    useStore.setState({ clerkGetToken: getToken ?? null });
+  }, [getToken]);
 
   useEffect(() => {
     const sessionList = sessionListRef.current;
@@ -326,14 +391,6 @@ function App() {
     },
     [loginWithPassword, loginWithPreviewPassword],
   );
-
-  const handlePasskeyLogin = useCallback(async () => {
-    try {
-      await loginWithPasskey();
-    } catch {
-      // store already exposes notification
-    }
-  }, [loginWithPasskey]);
 
   const syncRouteToState = useCallback(async () => {
     const route = parseChatRoute(window.location.pathname);
@@ -417,8 +474,15 @@ function App() {
     if (!settingsOpen || !authenticated) {
       return;
     }
-    void Promise.all([refreshProfile(), refreshUsage(), refreshModels(), refreshWorkspaces(true)]);
-  }, [settingsOpen, authenticated, refreshProfile, refreshUsage, refreshModels, refreshWorkspaces]);
+    void Promise.all([
+      refreshProfile(),
+      refreshUsage(),
+      refreshModels(),
+      refreshWorkspaces(true),
+      refreshAiProviders(),
+      refreshAiModels()
+    ]);
+  }, [settingsOpen, authenticated, refreshProfile, refreshUsage, refreshModels, refreshWorkspaces, refreshAiProviders, refreshAiModels]);
 
   useEffect(() => {
     if (!bootComplete || !authenticated || hasPlayedEntryAnimation.current) {
@@ -430,7 +494,11 @@ function App() {
     transitionTimers.current.push(resetTimer);
   }, [bootComplete, authenticated]);
 
-  const [displayedModel, setDisplayedModel] = useState(selectedModel);
+  const displayedModelId = useMemo(() => {
+    const matched = models.find((m) => m.id === selectedModel);
+    return matched?.model_id || selectedModel;
+  }, [models, selectedModel]);
+  const [displayedModel, setDisplayedModel] = useState(displayedModelId);
   const [displayedSessionUsage, setDisplayedSessionUsage] = useState(sessionUsage);
 
   useEffect(
@@ -444,7 +512,7 @@ function App() {
 
   useEffect(() => {
     const applyUpdate = () => {
-      setDisplayedModel(selectedModel);
+      setDisplayedModel(displayedModelId);
       setDisplayedSessionUsage(sessionUsage);
       lastUsageUpdateAtRef.current = Date.now();
       usageUpdateTimerRef.current = null;
@@ -467,7 +535,7 @@ function App() {
       window.clearTimeout(usageUpdateTimerRef.current);
     }
     usageUpdateTimerRef.current = window.setTimeout(applyUpdate, minInterval - elapsed);
-  }, [selectedModel, sessionUsage]);
+  }, [displayedModelId, sessionUsage]);
 
   const visibleMessageCount = messages.filter((item) => item.role !== "system").length;
   const hasConversationStarted = visibleMessageCount > 0 || sendingMessage || streamingMessage.length > 0;
@@ -476,6 +544,11 @@ function App() {
     setChatScrollY(0);
   }, [sessionId]);
 
+  useEffect(() => {
+    document.body.classList.remove("theme-standard", "theme-ethereal-light");
+    document.body.classList.add(`theme-${theme}`);
+  }, [theme]);
+
   const fadeStart = 40;
   const fadeEnd = 80;
   const fadeRange = fadeEnd - fadeStart;
@@ -483,12 +556,72 @@ function App() {
   const topbarCollapse = hasConversationStarted ? clamp01(chatScrollY / fadeEnd) : 0;
   const topbarHidden = topbarCollapse >= TOPBAR_INTERACTION_HIDE_THRESHOLD;
   const mainStyle: MainStyle = {
-    "--ba-topbar-collapse": topbarCollapse,
+    "--ba-topbar-collapse": theme === "ethereal-light" ? 0 : topbarCollapse,
   };
   const topbarStyle = {
-    pointerEvents: topbarHidden ? "none" : "auto",
-    visibility: topbarHidden ? "hidden" : "visible",
+    pointerEvents: (theme !== "ethereal-light" && topbarHidden) ? "none" : "auto",
+    visibility: (theme !== "ethereal-light" && topbarHidden) ? "hidden" : "visible",
   } as CSSProperties;
+
+  const topbarTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (theme !== "ethereal-light") {
+      if (topbarTimerRef.current !== null) {
+        window.clearTimeout(topbarTimerRef.current);
+        topbarTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (topbarTimerRef.current !== null) {
+      window.clearTimeout(topbarTimerRef.current);
+      topbarTimerRef.current = null;
+    }
+
+    if (chatScrollY <= 20) {
+      setTopbarVisible(true);
+    } else if (chatScrollY < lastScrollY.current - 10) {
+      setTopbarVisible(true);
+    } else if (chatScrollY > lastScrollY.current) {
+      // Scrolling down: hide instantly, but auto-reveal 1000ms after scrolling stops
+      setTopbarVisible(false);
+      topbarTimerRef.current = window.setTimeout(() => {
+        setTopbarVisible(true);
+        topbarTimerRef.current = null;
+      }, 1000);
+    } else {
+      // Just in case we are scrolling down but not exceeding the threshold yet, setup the same debounce
+      topbarTimerRef.current = window.setTimeout(() => {
+        setTopbarVisible(true);
+        topbarTimerRef.current = null;
+      }, 1000);
+    }
+
+    lastScrollY.current = chatScrollY;
+
+    return () => {
+      if (topbarTimerRef.current !== null) {
+        window.clearTimeout(topbarTimerRef.current);
+        topbarTimerRef.current = null;
+      }
+    };
+  }, [chatScrollY, theme]);
+
+  useEffect(() => {
+    if (!sessionInfoOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (modelSelectorRef.current && !modelSelectorRef.current.contains(event.target as Node)) {
+        setSessionInfoOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [sessionInfoOpen]);
+
   const topInfoOpacity = hasConversationStarted ? clamp01((fadeEnd - chatScrollY) / fadeRange) : 0;
   const bottomInfoOpacity = hasConversationStarted ? clamp01((chatScrollY - fadeEnd) / fadeRange) : 0;
 
@@ -560,13 +693,15 @@ function App() {
             <img src="/ba/arona-logo.jpg" alt="Arona" className="ba-auth-avatar" />
             <h1>Access Denied</h1>
             <p className="ba-auth-denied-message">
-              Your email is not on the authorized admin list.
+              {accessDeniedMessage || "Your email is not on the authorized admin list."}
             </p>
             <button
               type="button"
               className="ba-auth-button primary"
               onClick={async () => {
-                await signOut();
+                try {
+                   if (signOut) await signOut();
+                } catch {}
                 setAccessDenied(false);
               }}
             >
@@ -584,35 +719,29 @@ function App() {
       <div className="ba-app is-static-bg">
         <div className="ba-stage-bg" />
         <div className="ba-stage-overlay" />
-        <AuthPanel loading={authLoading} onPasswordLogin={handlePasswordLogin} onPasskeyLogin={handlePasskeyLogin} previewAvailable={isPreviewAvailable()} />
+        <Suspense fallback={<BootLoader onComplete={() => {}} />}>
+          <AuthPanel loading={authLoading} onPasswordLogin={handlePasswordLogin} previewAvailable={isPreviewAvailable()} />
+        </Suspense>
         <ToastStack toasts={toasts} dismissToast={dismissToast} />
       </div>
     );
   }
 
-  return (
-    <div className={`ba-app ${profile?.dynamic_background ? "is-dynamic-bg" : "is-static-bg"}`}>
-      {previewMode && (
-        <div className="ba-preview-banner" role="status" aria-live="polite">
-          ⚠ PREVIEW BUILD — Example data only · Changes are not persisted · No backend connection
-        </div>
-      )}
-      <div className="ba-stage-bg" />
-      <div className="ba-stage-overlay" />
-      <div className="ba-stage-grid" />
-
-      <aside className={`ba-sidebar ${sidebarOpen ? "is-open" : ""}`}>
+  const renderSidebar = () => {
+    const isEthereal = theme === "ethereal-light";
+    return (
+      <aside className={`ba-sidebar ${sidebarOpen ? "is-open" : ""} ${isEthereal ? "ethereal" : ""}`}>
         <header className="ba-sidebar-header">
           <div className="ba-sidebar-profile">
             <img src={profile?.avatar_url || "/ba/arona-logo.jpg"} alt="Avatar" />
             <div>
-              <p>{profile?.username || "Sensei"}</p>
-              <span>SCHALE TERMINAL</span>
+              <p>{isEthereal ? "Arona Chat" : (profile?.username || "Sensei")}</p>
+              <span>{isEthereal ? (profile?.username || "Sensei") : "SCHALE TERMINAL"}</span>
             </div>
           </div>
-          <button type="button" className="ba-ghost-btn" onClick={() => setSidebarOpen(false)} aria-label="Close sidebar">
-            <X size={18} />
-          </button>
+<button type="button" className="ba-ghost-btn flex items-center justify-center" onClick={() => setSidebarOpen(false)} aria-label="Close sidebar">
+              <X size={18} />
+            </button>
         </header>
 
         <div className="ba-sidebar-actions">
@@ -620,56 +749,62 @@ function App() {
             <MessageSquarePlus size={16} />
             <span>New Chat</span>
           </button>
-          <button
-            type="button"
-            className="ba-secondary-btn"
-            onClick={() => {
-                setAttachmentLibraryOpen(false);
+          {!isEthereal && (
+            <button
+              type="button"
+              className="ba-secondary-btn"
+              onClick={() => {
+                  setAttachmentLibraryOpen(false);
+                  setLibraryOpen(false);
+                  setSettingsOpen(true);
+                }}
+            >
+              <Settings2 size={16} />
+              <span>Settings</span>
+            </button>
+          )}
+          {!isEthereal && (
+            <button
+              type="button"
+              className="ba-secondary-btn"
+              onClick={() => {
+                setSettingsOpen(false);
                 setLibraryOpen(false);
-                setSettingsOpen(true);
+                setAttachmentLibraryOpen(true);
+                void (async () => {
+                  try {
+                    await refreshAttachmentLibrary();
+                  } catch (error) {
+                    pushToast(error instanceof Error ? error.message : "Failed to refresh attachment library.", "error");
+                  }
+                })();
               }}
-          >
-            <Settings2 size={16} />
-            <span>Settings</span>
-          </button>
-          <button
-            type="button"
-            className="ba-secondary-btn"
-            onClick={() => {
-              setSettingsOpen(false);
-              setLibraryOpen(false);
-              setAttachmentLibraryOpen(true);
-              void (async () => {
-                try {
-                  await refreshAttachmentLibrary();
-                } catch (error) {
-                  pushToast(error instanceof Error ? error.message : "Failed to refresh attachment library.", "error");
-                }
-              })();
-            }}
-          >
-            <FolderOpen size={16} />
-            <span>Attachments</span>
-          </button>
-          <button
-            type="button"
-            className="ba-secondary-btn"
-            onClick={() => {
-              setSettingsOpen(false);
-              setAttachmentLibraryOpen(false);
-              setLibraryOpen(true);
-              void (async () => {
-                try {
-                  await refreshLibrary();
-                } catch (error) {
-                  pushToast(error instanceof Error ? error.message : "Failed to refresh library.", "error");
-                }
-              })();
-            }}
-          >
-            <FolderOpen size={16} />
-            <span>Library</span>
-          </button>
+            >
+              <FolderOpen size={16} />
+              <span>Attachments</span>
+            </button>
+          )}
+          {!isEthereal && (
+            <button
+              type="button"
+              className="ba-secondary-btn"
+              onClick={() => {
+                setSettingsOpen(false);
+                setAttachmentLibraryOpen(false);
+                setLibraryOpen(true);
+                void (async () => {
+                  try {
+                    await refreshLibrary();
+                  } catch (error) {
+                    pushToast(error instanceof Error ? error.message : "Failed to refresh library.", "error");
+                  }
+                })();
+              }}
+            >
+              <FolderOpen size={16} />
+              <span>Library</span>
+            </button>
+          )}
         </div>
 
         <div ref={sessionListRef} className="ba-session-list" onScroll={handleSessionListScroll}>
@@ -776,236 +911,386 @@ function App() {
             </button>
           )}
         </div>
-      </aside>
 
-      <main className="ba-main" style={mainStyle}>
-        <header className="ba-topbar" style={topbarStyle}>
-          <button type="button" className="ba-menu-btn" onClick={() => setSidebarOpen(true)} aria-label="Open sidebar">
-            <Menu size={20} />
-          </button>
-          <div className="ba-topbar-title">
-            <img src="/ba/arona-logo.jpg" alt="Arona" />
-            <div>
-              <p>Arona</p>
-              <span>SCHALE TERMINAL</span>
-            </div>
-          </div>
-          {hasConversationStarted ? (
-            <div
-              className="ba-topbar-info"
-              style={{ opacity: topInfoOpacity, pointerEvents: topInfoOpacity > 0 ? "auto" : "none" }}
+        {isEthereal && (
+          <footer className="ba-sidebar-footer mt-auto flex flex-col gap-1 border-t border-[var(--arona-border-soft)] pt-3">
+            <button
+              type="button"
+              className="ba-secondary-btn !justify-start"
+              onClick={() => {
+                setAttachmentLibraryOpen(false);
+                setLibraryOpen(false);
+                setSettingsOpen(true);
+              }}
             >
-              <span>{displayedModel}</span>
-              <span>{tokenCount} tokens</span>
-              <strong>{topCostText}</strong>
+              <Settings2 size={16} />
+              <span>Settings</span>
+            </button>
+          </footer>
+        )}
+      </aside>
+    );
+  };
+
+  return (
+    <div className={`ba-app ${profile?.dynamic_background ? "is-dynamic-bg" : "is-static-bg"}`}>
+      {previewMode && (
+        <div className="ba-preview-banner" role="status" aria-live="polite">
+          ⚠ PREVIEW BUILD — Example data only · Changes are not persisted · No backend connection
+        </div>
+      )}
+      <div className="ba-stage-bg" />
+      <div className="ba-stage-overlay" />
+      <div className="ba-stage-grid" />
+
+      {renderSidebar()}
+
+      <main className={`ba-main ${theme === "ethereal-light" ? "ethereal" : ""}`} style={mainStyle}>
+        {theme === "ethereal-light" ? (
+          <>
+            <button
+              type="button"
+              className="ba-menu-btn-circular fixed top-6 left-6 z-[26]"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Open sidebar"
+            >
+              <Menu size={20} />
+            </button>
+          </>
+        ) : (
+          <header className="ba-topbar" style={topbarStyle}>
+            <button type="button" className="ba-menu-btn" onClick={() => setSidebarOpen(true)} aria-label="Open sidebar">
+              <Menu size={20} />
+            </button>
+            <div className="ba-topbar-title">
+              <img src="/ba/arona-logo.jpg" alt="Arona" />
+              <div>
+                <p>Arona</p>
+                <span>SCHALE TERMINAL</span>
+              </div>
             </div>
-          ) : null}
-        </header>
+            {hasConversationStarted ? (
+              <div
+                className="ba-topbar-info"
+                style={{ opacity: topInfoOpacity, pointerEvents: topInfoOpacity > 0 ? "auto" : "none" }}
+              >
+                <span>{displayedModel}</span>
+                <span>{tokenCount} tokens</span>
+                <strong>{topCostText}</strong>
+              </div>
+            ) : null}
+          </header>
+        )}
 
-        <section className="ba-chat-shell">
-          <ChatSession onScrollYChange={setChatScrollY} />
-          <ChatInputArea />
-        </section>
+        <Suspense fallback={<div className="ba-chat-shell-loading" />}>
+          <section className={`ba-chat-shell ${sidebarOpen ? "is-sidebar-open" : ""}`}>
+            {theme === "ethereal-light" && (
+              <div className={`ba-topbar-floating-container absolute top-6 left-0 right-0 z-[25] flex justify-center transition-all duration-300 ${(topbarVisible || sessionInfoOpen) ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"}`}>
+                <div className="relative" ref={modelSelectorRef}>
+                  <div
+                    className="ba-topbar-model-selector-button flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--arona-border-soft)] bg-white/80 backdrop-blur-md text-[0.9rem] font-semibold text-[var(--arona-text-p)] cursor-pointer transition-all hover:bg-white hover:shadow-md"
+                    onClick={() => setSessionInfoOpen(!sessionInfoOpen)}
+                  >
+                    {displayedModel}
+                    <MoreHorizontal size={14} className="opacity-50" />
+                  </div>
 
-        <BottomDock
-          onToggleSidebar={() => setSidebarOpen((current) => !current)}
-          onNewSession={triggerNewSession}
-          onToggleSettings={() => {
-            setAttachmentLibraryOpen(false);
-            setLibraryOpen(false);
-            setSettingsOpen((current) => !current);
-          }}
-          onLogout={async () => {
-            try {
-              await signOut();
-            } catch (error) {
-              console.error("Clerk sign out failed:", error);
-            } finally {
-              logout();
-            }
-          }}
-          showUsageInfo={hasConversationStarted}
-          usageOpacity={bottomInfoOpacity}
-          usageSimpleText={bottomUsageSimpleText}
-          usageDetailText={bottomUsageDetailText}
-          usageCurrencyText={bottomCostText}
-        />
+                  {sessionInfoOpen && (
+                    <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-64 bg-white/95 backdrop-blur-xl border border-[var(--arona-border-soft)] rounded-2xl shadow-xl p-4 z-[210] animate-ba-model-enter origin-top">
+                      <div className="flex flex-col gap-3">
+                        <div className="flex flex-col">
+                          <span className="text-[0.7rem] font-bold text-[var(--arona-text-t)] uppercase tracking-wider">Model</span>
+                          <span className="text-sm font-semibold text-[var(--arona-text-p)] truncate">{displayedModel}</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[0.7rem] font-bold text-[var(--arona-text-t)] uppercase tracking-wider">Tokens</span>
+                          <span className="text-sm font-semibold text-[var(--arona-text-p)]">{tokenCount.toLocaleString()}</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[0.7rem] font-bold text-[var(--arona-text-t)] uppercase tracking-wider">Cost</span>
+                          <span className="text-sm font-semibold text-[var(--arona-text-p)]">{topCostText}</span>
+                        </div>
+                        <hr className="border-[var(--arona-border-soft)] my-1" />
+                        <button
+                          type="button"
+                          className="w-full py-2 px-3 text-xs font-bold text-center rounded-lg bg-[var(--arona-bg)] text-[var(--arona-text-s)] hover:bg-[var(--arona-border-soft)] transition-colors"
+                          onClick={() => {
+                            setSessionInfoOpen(false);
+                            setSettingsOpen(true);
+                          }}
+                        >
+                          Open Full Settings
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            <ChatSession onScrollYChange={setChatScrollY} />
+            <ChatInputArea />
+          </section>
+
+          {theme !== "ethereal-light" && (
+            <BottomDock
+              onToggleSidebar={() => setSidebarOpen((current) => !current)}
+              onNewSession={triggerNewSession}
+              onToggleSettings={() => {
+                setAttachmentLibraryOpen(false);
+                setLibraryOpen(false);
+                setSettingsOpen((current) => !current);
+              }}
+              onLogout={async () => {
+                try {
+                  if (signOut) {
+                    await signOut();
+                  }
+                } catch (error) {
+                  console.error("Clerk sign out failed:", error);
+                } finally {
+                  logout();
+                }
+              }}
+              showUsageInfo={hasConversationStarted}
+              usageOpacity={bottomInfoOpacity}
+              usageSimpleText={bottomUsageSimpleText}
+              usageDetailText={bottomUsageDetailText}
+              usageCurrencyText={bottomCostText}
+            />
+          )}
+        </Suspense>
       </main>
 
       <button
         type="button"
         className={`ba-sidebar-mask ${sidebarOpen ? "is-visible" : ""}`}
-        aria-label="Close sidebar backdrop"
-        onClick={() => setSidebarOpen(false)}
+        aria-label="Close backdrop"
+        onClick={() => {
+          setSidebarOpen(false);
+        }}
       />
 
-      <SettingsPanel
-        open={settingsOpen}
-        profile={profile}
-        usage={usage}
-        dailyUsage={dailyUsage}
-        dailyUsageDate={dailyUsageDate}
-        models={models}
-        selectedModel={selectedModel}
-        titleModel={titleModel}
-        chatSettings={chatSettings}
-        logLevel={logLevel}
-        systemPromptTimezone={systemPromptTimezone}
-        showArchivedSessions={showArchivedSessions}
-        workspaces={workspaces}
-        activeWorkspaceId={activeWorkspaceId}
-        loading={authLoading}
-        backendBuildHash={backendBuildHash}
-        backendBuildTime={backendBuildTime}
-        onClose={() => setSettingsOpen(false)}
-        onSaveProfile={async (payload) => {
-          try {
-            await updateProfile(payload);
-            pushToast("Profile saved.", "success");
-          } catch (error) {
-            pushToast(error instanceof Error ? error.message : "Failed to save profile.", "error");
-          }
-        }}
-        onUploadAvatar={async (file) => {
-          try {
-            await uploadAvatar(file);
-          } catch (error) {
-            pushToast(error instanceof Error ? error.message : "Failed to upload avatar.", "error");
-          }
-        }}
-        onSetModel={async (model) => {
-          try {
-            await setSelectedModel(model);
-            pushToast("Model updated.", "success");
-          } catch (error) {
-            pushToast(error instanceof Error ? error.message : "Failed to update model.", "error");
-          }
-        }}
-        onSetTitleModel={async (model) => {
-          try {
-            await setTitleModel(model);
-            pushToast("Title model updated.", "success");
-          } catch (error) {
-            pushToast(error instanceof Error ? error.message : "Failed to update title model.", "error");
-          }
-        }}
-        onSaveChatSettings={async (payload) => {
-          try {
-            await setChatSettings(payload);
-            pushToast("Generation settings updated.", "success");
-          } catch (error) {
-            pushToast(error instanceof Error ? error.message : "Failed to update generation settings.", "error");
-          }
-        }}
-        onSetLogLevel={async (level) => {
-          try {
-            await setLogLevel(level);
-            pushToast("Log level updated.", "success");
-          } catch (error) {
-            pushToast(error instanceof Error ? error.message : "Failed to update log level.", "error");
-          }
-        }}
-        onSetSystemPromptTimezone={async (timezone) => {
-          try {
-            await setSystemPromptTimezone(timezone);
-            pushToast("System prompt timezone updated.", "success");
-          } catch (error) {
-            pushToast(error instanceof Error ? error.message : "Failed to update timezone.", "error");
-          }
-        }}
-        onSetShowArchivedSessions={async (show) => {
-          try {
-            await setShowArchivedSessions(show);
-            pushToast("Conversation visibility updated.", "success");
-          } catch (error) {
-            pushToast(error instanceof Error ? error.message : "Failed to update conversation visibility.", "error");
-          }
-        }}
-        onCreateWorkspace={async (name) => {
-          try {
-            await createWorkspace(name);
-            pushToast("Workspace created.", "success");
-          } catch (error) {
-            pushToast(error instanceof Error ? error.message : "Failed to create workspace.", "error");
-          }
-        }}
-        onRenameWorkspace={async (workspaceId, name) => {
-          try {
-            await renameWorkspace(workspaceId, name);
-            pushToast("Workspace renamed.", "success");
-          } catch (error) {
-            pushToast(error instanceof Error ? error.message : "Failed to rename workspace.", "error");
-          }
-        }}
-        onArchiveWorkspace={async (workspaceId, archived) => {
-          try {
-            await archiveWorkspace(workspaceId, archived);
-            pushToast(archived ? "Workspace archived." : "Workspace enabled.", "success");
-          } catch (error) {
-            pushToast(error instanceof Error ? error.message : "Failed to update workspace status.", "error");
-          }
-        }}
-        onActivateWorkspace={async (workspaceId) => {
-          try {
-            await activateWorkspace(workspaceId);
-            pushToast("Workspace activated.", "success");
-          } catch (error) {
-            pushToast(error instanceof Error ? error.message : "Failed to activate workspace.", "error");
-          }
-        }}
-        onSyncUsage={syncUsageAggregate}
-      />
-      <AttachmentLibraryPanel
-        open={attachmentLibraryOpen}
-        loading={attachmentLibraryLoading}
-        attachments={attachmentLibrary}
-        onClose={() => setAttachmentLibraryOpen(false)}
-        onRefresh={async () => {
-          try {
-            await refreshAttachmentLibrary();
-          } catch (error) {
-            pushToast(error instanceof Error ? error.message : "Failed to refresh attachment library.", "error");
-          }
-        }}
-        onDeleteAttachment={async (attachmentId) => {
-          try {
-            await deleteAttachment(attachmentId);
-            pushToast("Attachment deleted.", "success");
-          } catch (error) {
-            pushToast(error instanceof Error ? error.message : "Failed to delete attachment.", "error");
-          }
-        }}
-      />
-      <LibraryPanel
-        open={libraryOpen}
-        loading={libraryLoading}
-        items={libraryItems}
-        onClose={() => setLibraryOpen(false)}
-        onRefresh={async () => {
-          try {
-            await refreshLibrary();
-          } catch (error) {
-            pushToast(error instanceof Error ? error.message : "Failed to refresh library.", "error");
-          }
-        }}
-        onUploadFiles={async (files) => {
-          try {
-            await Promise.all(files.map((file) => uploadLibraryFile(file)));
-            await refreshLibrary();
-            pushToast("Files uploaded to Library.", "success");
-          } catch (error) {
-            pushToast(error instanceof Error ? error.message : "Failed to upload files.", "error");
-          }
-        }}
-        onDeleteItem={async (attachmentId) => {
-          try {
-            await deleteLibraryItem(attachmentId);
-            pushToast("Library file deleted.", "success");
-          } catch (error) {
-            pushToast(error instanceof Error ? error.message : "Failed to delete library file.", "error");
-          }
-        }}
-      />
+      <Suspense fallback={null}>
+        {settingsOpen && (
+          <SettingsPanel
+            open={settingsOpen}
+            profile={profile}
+            usage={usage}
+            dailyUsage={dailyUsage}
+            dailyUsageDate={dailyUsageDate}
+            userLimits={userLimits}
+            models={models}
+            selectedModel={selectedModel}
+            titleModel={titleModel}
+            chatSettings={chatSettings}
+            logLevel={logLevel}
+            systemPromptTimezone={systemPromptTimezone}
+            showArchivedSessions={showArchivedSessions}
+            workspaces={workspaces}
+            activeWorkspaceId={activeWorkspaceId}
+            loading={authLoading}
+            backendBuildHash={backendBuildHash}
+            backendBuildTime={backendBuildTime}
+            instanceId={instanceId}
+            schemaVersion={schemaVersion}
+            onClose={() => setSettingsOpen(false)}
+            onSaveProfile={async (payload) => {
+              try {
+                await updateProfile(payload);
+                pushToast("Profile saved.", "success");
+              } catch (error) {
+                pushToast(error instanceof Error ? error.message : "Failed to save profile.", "error");
+              }
+            }}
+            onUploadAvatar={async (file) => {
+              try {
+                await uploadAvatar(file);
+              } catch (error) {
+                pushToast(error instanceof Error ? error.message : "Failed to upload avatar.", "error");
+              }
+            }}
+            onSetModel={async (model) => {
+              try {
+                await setSelectedModel(model);
+                pushToast("Model updated.", "success");
+              } catch (error) {
+                pushToast(error instanceof Error ? error.message : "Failed to update model.", "error");
+              }
+            }}
+            onSetTitleModel={async (model) => {
+              try {
+                await setTitleModel(model);
+                pushToast("Title model updated.", "success");
+              } catch (error) {
+                pushToast(error instanceof Error ? error.message : "Failed to update title model.", "error");
+              }
+            }}
+            onSaveChatSettings={async (payload) => {
+              try {
+                await setChatSettings(payload);
+                pushToast("Generation settings updated.", "success");
+              } catch (error) {
+                pushToast(error instanceof Error ? error.message : "Failed to update generation settings.", "error");
+              }
+            }}
+            onSetLogLevel={async (level) => {
+              try {
+                await setLogLevel(level);
+                pushToast("Log level updated.", "success");
+              } catch (error) {
+                pushToast(error instanceof Error ? error.message : "Failed to update log level.", "error");
+              }
+            }}
+            onSetSystemPromptTimezone={async (timezone) => {
+              try {
+                await setSystemPromptTimezone(timezone);
+                pushToast("System prompt timezone updated.", "success");
+              } catch (error) {
+                pushToast(error instanceof Error ? error.message : "Failed to update timezone.", "error");
+              }
+            }}
+            onSetShowArchivedSessions={async (show) => {
+              try {
+                await setShowArchivedSessions(show);
+                pushToast("Conversation visibility updated.", "success");
+              } catch (error) {
+                pushToast(error instanceof Error ? error.message : "Failed to update conversation visibility.", "error");
+              }
+            }}
+            onCreateWorkspace={async (name) => {
+              try {
+                await createWorkspace(name);
+                pushToast("Workspace created.", "success");
+              } catch (error) {
+                pushToast(error instanceof Error ? error.message : "Failed to create workspace.", "error");
+              }
+            }}
+            onRenameWorkspace={async (workspaceId, name) => {
+              try {
+                await renameWorkspace(workspaceId, name);
+                pushToast("Workspace renamed.", "success");
+              } catch (error) {
+                pushToast(error instanceof Error ? error.message : "Failed to rename workspace.", "error");
+              }
+            }}
+            onArchiveWorkspace={async (workspaceId, archived) => {
+              try {
+                await archiveWorkspace(workspaceId, archived);
+                pushToast(archived ? "Workspace archived." : "Workspace enabled.", "success");
+              } catch (error) {
+                pushToast(error instanceof Error ? error.message : "Failed to update workspace status.", "error");
+              }
+            }}
+            onActivateWorkspace={async (workspaceId) => {
+              try {
+                await activateWorkspace(workspaceId);
+                pushToast("Workspace activated.", "success");
+              } catch (error) {
+                pushToast(error instanceof Error ? error.message : "Failed to activate workspace.", "error");
+              }
+            }}
+            onSyncUsage={syncUsageAggregate}
+            aiProviders={aiProviders}
+            aiProvidersLoading={aiProvidersLoading}
+            aiModels={aiModels}
+            aiModelsLoading={aiModelsLoading}
+            encryptionKeyReady={encryptionKeyReady}
+            isAdmin={isAdmin}
+            canManageAi={canManageAi}
+            limitsEnabled={limitsEnabled}
+            adminUsers={adminUsers}
+            adminUsersLoading={adminUsersLoading}
+            onRefreshAdminUsers={refreshAdminUsers}
+            onUpdateUserPermissions={updateUserPermissions}
+            onUpdateUserBudget={updateUserBudget}
+            onCreateAiProvider={createAiProvider}
+            onUpdateAiProvider={updateAiProvider}
+            onDeleteAiProvider={deleteAiProvider}
+            onCreateAiModel={createAiModel}
+            onUpdateAiModel={updateAiModel}
+            onDeleteAiModel={deleteAiModel}
+            onFetchUpstreamModels={fetchUpstreamModels}
+            onOpenAttachments={() => {
+              setSettingsOpen(false);
+              setLibraryOpen(false);
+              setAttachmentLibraryOpen(true);
+              void refreshAttachmentLibrary();
+            }}
+            onOpenLibrary={() => {
+              setSettingsOpen(false);
+              setAttachmentLibraryOpen(false);
+              setLibraryOpen(true);
+              void refreshLibrary();
+            }}
+            onLogout={async () => {
+              try {
+                if (signOut) {
+                  await signOut();
+                }
+              } catch (error) {
+                console.error("Clerk sign out failed:", error);
+              } finally {
+                logout();
+              }
+            }}
+          />
+        )}
+        {attachmentLibraryOpen && (
+          <AttachmentLibraryPanel
+            open={attachmentLibraryOpen}
+            loading={attachmentLibraryLoading}
+            attachments={attachmentLibrary}
+            onClose={() => setAttachmentLibraryOpen(false)}
+            onRefresh={async () => {
+              try {
+                await refreshAttachmentLibrary();
+              } catch (error) {
+                pushToast(error instanceof Error ? error.message : "Failed to refresh attachment library.", "error");
+              }
+            }}
+            onDeleteAttachment={async (attachmentId) => {
+              try {
+                await deleteAttachment(attachmentId);
+                pushToast("Attachment deleted.", "success");
+              } catch (error) {
+                pushToast(error instanceof Error ? error.message : "Failed to delete attachment.", "error");
+              }
+            }}
+          />
+        )}
+        {libraryOpen && (
+          <LibraryPanel
+            open={libraryOpen}
+            loading={libraryLoading}
+            items={libraryItems}
+            onClose={() => setLibraryOpen(false)}
+            onRefresh={async () => {
+              try {
+                await refreshLibrary();
+              } catch (error) {
+                pushToast(error instanceof Error ? error.message : "Failed to refresh library.", "error");
+              }
+            }}
+            onUploadFiles={async (files) => {
+              try {
+                await Promise.all(files.map((file) => uploadLibraryFile(file)));
+                await refreshLibrary();
+                pushToast("Files uploaded to Library.", "success");
+              } catch (error) {
+                pushToast(error instanceof Error ? error.message : "Failed to upload files.", "error");
+              }
+            }}
+            onDeleteItem={async (attachmentId) => {
+              try {
+                await deleteLibraryItem(attachmentId);
+                pushToast("Library file deleted.", "success");
+              } catch (error) {
+                pushToast(error instanceof Error ? error.message : "Failed to delete library file.", "error");
+              }
+            }}
+          />
+        )}
+      </Suspense>
 
       {renameSessionTarget ? (
         <div className="ba-modal-backdrop" role="presentation" onClick={closeRenameDialog}>

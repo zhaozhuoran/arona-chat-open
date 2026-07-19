@@ -189,6 +189,9 @@ import {
   hasUsageMetrics,
   toFiniteNumber,
   parseOpenRouterUsage,
+  getApiCallMode,
+  setApiCallMode,
+  shouldExcludeReasoning,
   insertUsageRecord,
   buildModelOptions,
   resolveAttachmentObjectKey,
@@ -198,7 +201,10 @@ import {
   resolveLibraryAccessUrl,
   toChatAttachmentPayload,
   getMessageAttachmentsMap,
-  listSessionMessages
+  listSessionMessages,
+  checkRequestLimits,
+  resolveModelBuiltIn,
+  recordRequestLog
 } from "./backend-utils";
 import {
   CHAT_STREAM_JOB_KEY_PREFIX,
@@ -216,6 +222,8 @@ import {
 } from "./chat-stream";
 import type { Env } from "./types";
 import { TOOLS, getAvailableTools } from "./tools";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { streamText } from "ai";
 
 export class ChatSessionDurableObject {
   private readonly state: DurableObjectState;
@@ -447,7 +455,11 @@ export class ChatSessionDurableObject {
 
     if (payload.client_request_id) {
       for (const existing of this.jobs.values()) {
-        if (existing.client_request_id === payload.client_request_id && existing.payload.user_id === payload.user_id) {
+        if (
+          existing.client_request_id === payload.client_request_id &&
+          existing.payload.user_id === payload.user_id &&
+          (existing.state === "queued" || existing.state === "running")
+        ) {
           try {
             await upsertChatStreamJobRecord(this.env.D1_DB, existing);
           } catch (error) {
@@ -480,6 +492,7 @@ export class ChatSessionDurableObject {
         user_id: payload.user_id,
         user_message_id: payload.user_message_id,
         new_session: payload.new_session,
+        is_admin: payload.is_admin,
       },
       cursor: null,
       created_at: now,
@@ -694,9 +707,9 @@ export class ChatSessionDurableObject {
         }
 
         const isResuming = target.state === "running";
+        target.updated_at = Date.now();
         if (!isResuming) {
           target.state = "running";
-          target.updated_at = Date.now();
           this.jobs.set(target.job_id, target);
           await this.persistJob(target);
           try {
@@ -715,6 +728,8 @@ export class ChatSessionDurableObject {
             user_id: target.payload.user_id,
           });
         } else {
+          this.jobs.set(target.job_id, target);
+          await this.persistJob(target);
           logInfo("chat.do.job_resuming", {
             session_id: target.payload.session_id,
             job_id: target.job_id,
@@ -773,7 +788,15 @@ export class ChatSessionDurableObject {
               state: target.state,
             }, persistError);
           }
-          await this.appendEvent(target.job_id, "job_failed", { error: errorMessage });
+          let revealedErrorMessage = errorMessage;
+          const isUpstreamError = Boolean(upstreamError?.upstream_status);
+          if (isUpstreamError && !target.payload.is_admin) {
+            const showToUsers = this.env.SHOW_UPSTREAM_ERROR_TO_USERS === "1" || this.env.SHOW_UPSTREAM_ERROR_TO_USERS === "true";
+            if (!showToUsers) {
+              revealedErrorMessage = "Upstream API Error";
+            }
+          }
+          await this.appendEvent(target.job_id, "job_failed", { error: revealedErrorMessage });
           logError("chat.do.job_failed", {
             session_id: target.payload.session_id,
             job_id: target.job_id,
@@ -805,12 +828,251 @@ export class ChatSessionDurableObject {
     const db = this.env.D1_DB;
     const pricingTable = parsePricingConfig(this.env);
     let currentMessages = [...payload.open_router_messages];
+    if (payload.chat_settings.attachment_mode === "base64" && payload.history_items && payload.attachment_meta_by_id) {
+      try {
+        const mockCtx = {
+          env: this.env,
+          req: { url: payload.request_url },
+          executionCtx: {
+            waitUntil: (promise: Promise<any>) => this.state.waitUntil(promise),
+          },
+        } as unknown as AppContext;
+        const metaMap = new Map<string, AttachmentModelMeta>();
+        for (const [k, v] of Object.entries(payload.attachment_meta_by_id)) {
+          metaMap.set(k, v);
+        }
+        const rebuiltMessages = await Promise.all(
+          payload.history_items.map(async (item) => ({
+            role: item.role,
+            content: await buildOpenRouterMessageContent(
+              mockCtx,
+              item.role,
+              item.content,
+              item.attachments,
+              metaMap,
+              "base64"
+            ),
+          }))
+        );
+        rebuiltMessages.unshift({
+          role: "system",
+          content: await buildInjectedSystemPrompt(db, this.env, payload.user_id),
+        });
+        currentMessages = rebuiltMessages;
+        logTrace("chat.do.run.rebuilt_base64_messages", {
+          session_id: payload.session_id,
+          job_id: job.job_id,
+          rebuilt_count: rebuiltMessages.length,
+        });
+      } catch (error) {
+        logError("chat.do.run.rebuild_base64_messages_failed", {
+          session_id: payload.session_id,
+          job_id: job.job_id,
+        }, error);
+      }
+    }
     let iteration = 0;
     const maxIterations = 5;
     let finalUsage: OpenRouterUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, cost: 0 };
     let finalResponseModel = payload.selected_model;
     let lastFullResponse = "";
     let lastReasoningSummary = "";
+
+    const apiCallMode = await getApiCallMode(db);
+
+    if (apiCallMode === "sdk") {
+      logInfo("chat.do.run.sdk_mode", {
+        session_id: payload.session_id,
+        job_id: job.job_id,
+        model: payload.selected_model,
+        endpoint: payload.api_endpoint,
+      });
+
+      try {
+        let baseUrl = payload.api_endpoint;
+        if (baseUrl.endsWith("/chat/completions")) {
+          baseUrl = baseUrl.slice(0, -"/chat/completions".length);
+        }
+
+        const providerInstance = createOpenRouter({
+          apiKey: payload.api_key,
+          baseUrl: baseUrl,
+        });
+
+        const sdkTools: Record<string, any> = {};
+        if (payload.chat_settings.web_search_enabled) {
+          for (const [name, handler] of Object.entries(TOOLS)) {
+            sdkTools[name] = {
+              description: handler.definition.function.description,
+              parameters: handler.definition.function.parameters as any,
+              execute: async (args: any) => {
+                const searchTip = name === "web_search"
+                  ? `\n> **Arona is searching:** \`${args.query}\`...\n`
+                  : `\n> **Arona is using tool:** \`${name}\`...\n`;
+                await this.appendEvent(job.job_id, "content_delta", { content_delta: searchTip });
+                return await handler.execute(args, this.env, { defaultCount: payload.chat_settings.web_search_max_results });
+              },
+            };
+          }
+        }
+
+        const computedMaxTokens =
+          (payload.upstream_request_body as Record<string, unknown>).max_tokens ??
+          (payload.upstream_request_body as Record<string, unknown>).max_output_tokens ??
+          undefined;
+
+        const includeReasoningField =
+          !shouldExcludeReasoning(payload.selected_model, payload.selected_model) &&
+          payload.chat_settings.reasoning_effort &&
+          payload.chat_settings.reasoning_effort !== "default";
+
+        const systemMessages = currentMessages.filter((m) => m.role === "system");
+        const otherMessages = currentMessages.filter((m) => m.role !== "system");
+        const systemPrompt = systemMessages
+          .map((m) => {
+            if (typeof m.content === "string") return m.content;
+            if (Array.isArray(m.content)) {
+              return m.content
+                .map((part) => {
+                  if (typeof part === "string") return part;
+                  if (part && typeof part === "object") {
+                    if ("text" in part && typeof part.text === "string") return part.text;
+                  }
+                  return "";
+                })
+                .filter(Boolean)
+                .join("\n");
+            }
+            return "";
+          })
+          .filter(Boolean)
+          .join("\n\n");
+
+        const sdkResult = await streamText({
+          model: providerInstance(payload.selected_model),
+          system: systemPrompt || undefined,
+          messages: otherMessages as any,
+          tools: sdkTools,
+          maxSteps: 5,
+          ...(computedMaxTokens && !payload.chat_settings.disable_max_output_tokens ? { maxTokens: Number(computedMaxTokens) } : {}),
+          ...(includeReasoningField ? { providerOptions: { openrouter: { reasoning: { effort: payload.chat_settings.reasoning_effort } } } } : {}),
+        } as any);
+
+        let fullResponse = "";
+        let reasoningSummary = "";
+
+        for await (const part of sdkResult.fullStream) {
+          const rawPart = part as any;
+          if (rawPart.type === "text-delta") {
+            const delta = rawPart.textDelta;
+            if (delta) {
+              fullResponse += delta;
+              job.updated_at = Date.now();
+              await this.appendEvent(job.job_id, "content_delta", { content_delta: delta });
+            }
+          } else if (rawPart.type === "reasoning") {
+            const delta = rawPart.reasoningDelta;
+            if (delta) {
+              reasoningSummary += delta;
+              job.updated_at = Date.now();
+              await this.appendEvent(job.job_id, "reasoning_delta", { reasoning_delta: delta });
+            }
+          } else if (rawPart.type === "error") {
+            throw rawPart.error;
+          } else if (rawPart.type === "finish") {
+            if (rawPart.usage) {
+              const promptTokens = toFiniteNumber(rawPart.usage.promptTokens);
+              const completionTokens = toFiniteNumber(rawPart.usage.completionTokens);
+              const totalTokens = promptTokens + completionTokens;
+
+              finalUsage.prompt_tokens = promptTokens;
+              finalUsage.completion_tokens = completionTokens;
+              finalUsage.total_tokens = totalTokens;
+              finalUsage.cost = calculateCostUsd(finalResponseModel, finalUsage, pricingTable, payload.chat_settings.service_tier);
+            }
+          }
+        }
+
+        lastFullResponse = fullResponse;
+        lastReasoningSummary = reasoningSummary;
+
+        if (lastFullResponse.trim().length > 0) {
+          const assistantMessageId = crypto.randomUUID();
+          await db
+            .prepare("INSERT INTO messages (id, session_id, role, content, model, reasoning_summary, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+            .bind(assistantMessageId, payload.session_id, "assistant", lastFullResponse, finalResponseModel, lastReasoningSummary.trim() || null, Date.now())
+            .run();
+          if (payload.new_session) {
+            const firstUserMsg = payload.history_items?.find((item) => item.role === "user");
+            let userTitleRef = payload.user_message || "";
+            if (firstUserMsg && Array.isArray(firstUserMsg.attachments) && firstUserMsg.attachments.length > 0) {
+              const attachmentNames = firstUserMsg.attachments.map((att) => att.file_name || "unnamed file").join(", ");
+              if (userTitleRef) {
+                userTitleRef += ` [Attachments: ${attachmentNames}]`;
+              } else {
+                userTitleRef = `[Attachments: ${attachmentNames}]`;
+              }
+            }
+            const titleAuth = { sub: payload.user_id, isAdmin: payload.is_admin, canManageAi: false };
+            const titleModel = await getTitleModel(db, payload.user_id);
+            const titleIsBuiltIn = await resolveModelBuiltIn(this.env, titleModel, titleAuth);
+            let skipTitle = false;
+            if (titleIsBuiltIn) {
+              const titleLimit = await checkRequestLimits(this.env, payload.user_id, payload.is_admin, true);
+              if (!titleLimit.allowed) {
+                await recordRequestLog(db, payload.user_id, "title", "failure");
+                skipTitle = true;
+              }
+            }
+            if (!skipTitle) {
+              const titleResult = await generateSessionTitleWithContext(
+                {
+                  env: this.env,
+                  requestUrl: payload.request_url,
+                  requestId: "durable-object",
+                  logLevel: DEFAULT_LOG_LEVEL,
+                },
+                db,
+                userTitleRef,
+                lastFullResponse,
+                payload.user_id,
+              );
+              await insertUsageRecord(db, payload.session_id, titleResult.model, titleResult.usage, pricingTable, payload.user_id, payload.chat_settings.service_tier, !titleIsBuiltIn);
+              if (titleResult.title) {
+                await db.prepare("UPDATE sessions SET title = ? WHERE id = ?").bind(titleResult.title, payload.session_id).run();
+              }
+              await recordRequestLog(db, payload.user_id, "title", "success");
+            }
+          }
+        }
+
+        await insertUsageRecord(db, payload.session_id, finalResponseModel, finalUsage, pricingTable, payload.user_id, payload.chat_settings.service_tier, !payload.is_built_in);
+        logInfo("chat.do.run.persisted_assistant", {
+          session_id: payload.session_id,
+          job_id: job.job_id,
+          model: finalResponseModel,
+          output_chars: lastFullResponse.length,
+          total_tokens: finalUsage.total_tokens,
+        });
+
+      } catch (error) {
+        const usedTokens = toFiniteNumber(finalUsage.total_tokens);
+        const usedCost = toFiniteNumber(finalUsage.cost);
+        if (usedTokens > 0 || usedCost > 0) {
+          try {
+            await insertUsageRecord(db, payload.session_id, finalResponseModel, finalUsage, pricingTable, payload.user_id, payload.chat_settings.service_tier, !payload.is_built_in);
+          } catch (recordError) {
+            logError("chat.do.run.usage_record_failed_on_error", {
+              session_id: payload.session_id,
+              job_id: job.job_id,
+            }, recordError);
+          }
+        }
+        throw error;
+      }
+
+      return;
+    }
 
     try {
       logTrace("chat.do.run.begin", {
@@ -844,16 +1106,42 @@ export class ChatSessionDurableObject {
         const upstreamAbortController = new AbortController();
         const upstreamTimeout = setTimeout(() => upstreamAbortController.abort(), CHAT_STREAM_UPSTREAM_TIMEOUT_MS);
         let upstream: Response;
+
+        const computedMaxTokens =
+          (currentUpstreamRequestBody as Record<string, unknown>).max_tokens ??
+          (currentUpstreamRequestBody as Record<string, unknown>).max_output_tokens ??
+          null;
+        logInfo("chat.do.upstream_request", {
+          session_id: payload.session_id,
+          job_id: job.job_id,
+          iteration,
+          model: payload.selected_model,
+          endpoint: payload.api_endpoint,
+          max_tokens: computedMaxTokens,
+          message_count: Array.isArray(currentMessages) ? currentMessages.length : 0,
+          use_chat_completions_api: payload.use_chat_completions_api,
+          has_tools: Array.isArray((currentUpstreamRequestBody as Record<string, unknown>).tools)
+            ? ((currentUpstreamRequestBody as Record<string, unknown>).tools as unknown[]).length > 0
+            : false,
+          has_plugins: Array.isArray((currentUpstreamRequestBody as Record<string, unknown>).plugins)
+            ? ((currentUpstreamRequestBody as Record<string, unknown>).plugins as unknown[]).length > 0
+            : false,
+          body: currentUpstreamRequestBody,
+        });
         try {
           upstream = await fetch(payload.api_endpoint, {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${this.env.AI_API_KEY}`,
+              Authorization: `Bearer ${payload.api_key}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify(currentUpstreamRequestBody),
             signal: upstreamAbortController.signal,
           });
+        } catch (fetchError) {
+          const networkError = new Error(`Upstream connection failed: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`);
+          (networkError as any).upstream_status = 504; // Gateway Timeout / connection error representation
+          throw networkError;
         } finally {
           clearTimeout(upstreamTimeout);
         }
@@ -932,11 +1220,23 @@ export class ChatSessionDurableObject {
         });
         const upstreamReader = upstream.body?.getReader();
         if (!upstreamReader) {
-          throw new Error("Upstream stream is empty.");
+          const upstreamReaderError = new Error("Upstream stream is empty.");
+          (upstreamReaderError as any).upstream_status = upstream.status;
+          throw upstreamReaderError;
         }
         try {
           while (true) {
-            const { done, value } = await upstreamReader.read();
+            let done: boolean;
+            let value: Uint8Array | undefined;
+            try {
+              const result = await upstreamReader.read();
+              done = result.done;
+              value = result.value;
+            } catch (readError) {
+              const streamReadError = new Error(`Upstream stream read failed: ${readError instanceof Error ? readError.message : String(readError)}`);
+              (streamReadError as any).upstream_status = upstream.status;
+              throw streamReadError;
+            }
             if (done) {
               break;
             }
@@ -963,7 +1263,9 @@ export class ChatSessionDurableObject {
               }
               if (parsed && typeof parsed === "object") {
                 if (parsed.error) {
-                  throw new Error(typeof parsed.error === "string" ? parsed.error : parsed.error.message || "Unknown error");
+                  const streamError = new Error(typeof parsed.error === "string" ? parsed.error : parsed.error.message || "Unknown error");
+                  (streamError as any).upstream_status = 200; // It was a successful connection but returned an error in the stream
+                  throw streamError;
                 }
                 if (parsed.model) {
                   responseModel = parsed.model;
@@ -980,10 +1282,23 @@ export class ChatSessionDurableObject {
                         await this.appendEvent(job.job_id, "content_delta", { content_delta: deltaText });
                       }
                     }
+                    let reasoningText = "";
                     if (delta.reasoning) {
-                      reasoningSummary += delta.reasoning;
+                      reasoningText = delta.reasoning;
+                    } else if (Array.isArray(delta.reasoning_details)) {
+                      for (const detail of delta.reasoning_details) {
+                        if (typeof detail === "string") {
+                          reasoningText += detail;
+                        } else if (detail && typeof detail === "object" && typeof detail.text === "string") {
+                          reasoningText += detail.text;
+                        }
+                      }
+                    }
+
+                    if (reasoningText) {
+                      reasoningSummary += reasoningText;
                       job.updated_at = Date.now();
-                      await this.appendEvent(job.job_id, "reasoning_delta", { reasoning_delta: delta.reasoning });
+                      await this.appendEvent(job.job_id, "reasoning_delta", { reasoning_delta: reasoningText });
                     }
                     if (delta.tool_calls) {
                       for (const tc of delta.tool_calls) {
@@ -1067,24 +1382,51 @@ export class ChatSessionDurableObject {
           .bind(assistantMessageId, payload.session_id, "assistant", lastFullResponse, finalResponseModel, lastReasoningSummary.trim() || null, Date.now())
           .run();
         if (payload.new_session) {
-          const titleResult = await generateSessionTitleWithContext(
-            {
-              env: this.env,
-              requestUrl: payload.request_url,
-              requestId: "durable-object",
-              logLevel: DEFAULT_LOG_LEVEL,
-            },
-            db,
-            payload.user_message,
-            lastFullResponse,
-          );
-          await insertUsageRecord(db, payload.session_id, titleResult.model, titleResult.usage, pricingTable, payload.chat_settings.service_tier);
-          if (titleResult.title) {
-            await db.prepare("UPDATE sessions SET title = ? WHERE id = ?").bind(titleResult.title, payload.session_id).run();
+          const firstUserMsg = payload.history_items?.find((item) => item.role === "user");
+          let userTitleRef = payload.user_message || "";
+          if (firstUserMsg && Array.isArray(firstUserMsg.attachments) && firstUserMsg.attachments.length > 0) {
+            const attachmentNames = firstUserMsg.attachments.map((att) => att.file_name || "unnamed file").join(", ");
+            if (userTitleRef) {
+              userTitleRef += ` [Attachments: ${attachmentNames}]`;
+            } else {
+              userTitleRef = `[Attachments: ${attachmentNames}]`;
+            }
+          }
+          const titleAuth = { sub: payload.user_id, isAdmin: payload.is_admin, canManageAi: false };
+          const titleModel = await getTitleModel(db, payload.user_id);
+          const titleIsBuiltIn = await resolveModelBuiltIn(this.env, titleModel, titleAuth);
+          let skipTitle = false;
+          if (titleIsBuiltIn) {
+            const titleLimit = await checkRequestLimits(this.env, payload.user_id, payload.is_admin, true);
+            if (!titleLimit.allowed) {
+              await recordRequestLog(db, payload.user_id, "title", "failure");
+              skipTitle = true;
+            }
+          }
+          if (!skipTitle) {
+            const titleResult = await generateSessionTitleWithContext(
+              {
+                env: this.env,
+                requestUrl: payload.request_url,
+                requestId: "durable-object",
+                logLevel: DEFAULT_LOG_LEVEL,
+              },
+              db,
+              userTitleRef,
+              lastFullResponse,
+              payload.user_id,
+            );
+            await insertUsageRecord(db, payload.session_id, titleResult.model, titleResult.usage, pricingTable, payload.user_id, payload.chat_settings.service_tier);
+            if (titleResult.title) {
+              await db.prepare("UPDATE sessions SET title = ? WHERE id = ?").bind(titleResult.title, payload.session_id).run();
+            }
+            if (titleIsBuiltIn) {
+              await recordRequestLog(db, payload.user_id, "title", "success");
+            }
           }
         }
       }
-      await insertUsageRecord(db, payload.session_id, finalResponseModel, finalUsage, pricingTable, payload.chat_settings.service_tier);
+      await insertUsageRecord(db, payload.session_id, finalResponseModel, finalUsage, pricingTable, payload.user_id, payload.chat_settings.service_tier);
       logInfo("chat.do.run.persisted_assistant", {
         session_id: payload.session_id,
         job_id: job.job_id,
@@ -1096,7 +1438,14 @@ export class ChatSessionDurableObject {
       const usedTokens = toFiniteNumber(finalUsage.total_tokens);
       const usedCost = toFiniteNumber(finalUsage.cost);
       if (usedTokens > 0 || usedCost > 0) {
-        await insertUsageRecord(db, payload.session_id, finalResponseModel, finalUsage, pricingTable, payload.chat_settings.service_tier);
+        try {
+          await insertUsageRecord(db, payload.session_id, finalResponseModel, finalUsage, pricingTable, payload.user_id, payload.chat_settings.service_tier, !payload.is_built_in);
+        } catch (recordError) {
+          logError("chat.do.run.usage_record_failed_on_error", {
+            session_id: payload.session_id,
+            job_id: job.job_id,
+          }, recordError);
+        }
       }
       throw error;
     }
