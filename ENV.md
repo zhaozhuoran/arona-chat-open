@@ -343,6 +343,19 @@ This document contains a comprehensive, exhaustive reference of all environment 
 
 ### System Default User Preferences
 
+#### `DEFAULT_THEME`
+* **Type**: `string` (`"standard"` | `"ethereal-light"`)
+* **Required**: No
+* **Default**: `ethereal-light`
+* **Example**: `standard`
+* **Values**: `"standard"`, `"ethereal-light"`
+* **Description**: Configures the default theme returned by the system for newly registered/default users, or when no theme preference is set in the database. `standard` applies the classic Blue Archive theme; `ethereal-light` applies the modern Ethereal Light theme. Users who have explicitly chosen a theme keep their choice; this variable only affects users with no stored preference.
+* **Used By**:
+  - `readProfile` function in `backend/src/backend-utils.ts`
+  - The backend validation module for user profile updates in `backend/src/routes-account.ts`
+
+---
+
 #### `DEFAULT_EL_STREAMING_STYLE`
 * **Type**: `string` (`"typewriter"` | `"buffered"`)
 * **Required**: No

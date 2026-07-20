@@ -46,4 +46,8 @@ export interface Env {
   // E2E Test
   E2E_TEST?: string;
   E2E_TEST_TOKEN?: string;
+
+  // System default user preference overrides
+  DEFAULT_THEME?: string;
+  DEFAULT_EL_STREAMING_STYLE?: string;
 }

@@ -82,4 +82,28 @@ test("readProfile default theme and streaming style fallbacks and env override",
   const profile3 = await readProfile(context3, "user-123");
   assert.strictEqual(profile3.theme, "standard");
   assert.strictEqual(profile3.ethereal_streaming_style, "buffered");
+
+  // Case 4: Database theme is NULL and DEFAULT_THEME env override is set to 'standard'
+  const context4 = {
+    env: {
+      D1_DB: mockDb,
+      DEFAULT_THEME: "standard",
+    },
+  } as any;
+
+  queryTheme = null;
+
+  const profile4 = await readProfile(context4, "user-123");
+  assert.strictEqual(profile4.theme, "standard");
+
+  // Case 5: Database theme is NULL and DEFAULT_THEME env override is set to 'ethereal-light'
+  const context5 = {
+    env: {
+      D1_DB: mockDb,
+      DEFAULT_THEME: "ethereal-light",
+    },
+  } as any;
+
+  const profile5 = await readProfile(context5, "user-123");
+  assert.strictEqual(profile5.theme, "ethereal-light");
 });

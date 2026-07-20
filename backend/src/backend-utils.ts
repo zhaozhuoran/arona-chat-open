@@ -1048,7 +1048,7 @@ export const applySchemaV18 = async (db: D1Database): Promise<void> => {
       existingProfile.avatar_url_cache,
       existingProfile.avatar_url_cache_expires_at,
       existingProfile.dynamic_background,
-      existingProfile.theme || "standard",
+      existingProfile.theme || null,
       existingProfile.send_shortcut,
       existingProfile.conversation_library_enabled,
       existingProfile.updated_at,
@@ -2458,8 +2458,8 @@ export const ensureProfile = async (db: D1Database, userId: string, isAdmin: boo
   const now = Date.now();
   await db
     .prepare(`
-      INSERT INTO profiles (user_id, username, dynamic_background, send_shortcut, is_admin, updated_at)
-      VALUES (?, ?, 1, 'ctrl_enter', ?, ?)
+      INSERT INTO profiles (user_id, username, dynamic_background, theme, send_shortcut, is_admin, updated_at)
+      VALUES (?, ?, 1, NULL, 'ctrl_enter', ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET is_admin = excluded.is_admin, updated_at = excluded.updated_at
     `)
     .bind(userId, "Sensei", isAdmin ? 1 : 0, now)
@@ -2521,12 +2521,15 @@ export const readProfile = async (c: AppContext, userId: string, isAdmin: boolea
     ? userStreamingStyle
     : fallbackStreamingStyle;
 
+  const envTheme = c.env.DEFAULT_THEME?.trim();
+  const fallbackTheme = envTheme === "standard" ? "standard" : "ethereal-light";
+
   return {
     username: row.username,
     avatar_key: avatarKey,
     avatar_url: avatarUrl,
     dynamic_background: Number(row.dynamic_background) === 1,
-    theme: row.theme === "standard" ? "standard" : "ethereal-light",
+    theme: row.theme === "standard" ? "standard" : fallbackTheme,
     arona_bubble_style: (row.arona_bubble_style as any) || "none",
     ethereal_streaming_style: finalStreamingStyle as any,
     send_shortcut: normalizeSendShortcut(row.send_shortcut),
