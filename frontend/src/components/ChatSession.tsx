@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, memo, useCallback } from "react";
-import { createPortal } from "react-dom";
+// import { createPortal } from "react-dom";
 import { useShallow } from "zustand/react/shallow";
-import type { MouseEvent, PointerEvent } from "react";
+import type { MouseEvent } from "react";
 import { FileText, MoreHorizontal, Copy, RefreshCw, ChevronLeft, ChevronRight, ArrowDown } from "lucide-react";
 import type { Message, MessageAttachment } from "@arona-chat/shared";
 import { useStore } from "../store/useStore";
@@ -287,7 +287,8 @@ const AssistantMessageRow = memo(
     const profile = useStore((state) => state.profile);
     const aronaBubbleStyle = profile?.arona_bubble_style || "none";
 
-    // Ethereal specific state
+    // Ethereal specific state (Disabled/Commented out to remove long press & floating menu)
+    /*
     const longPressTimerRef = useRef<number | null>(null);
     const jellyTimerRef = useRef<number | null>(null);
     const closeTimerRef = useRef<number | null>(null);
@@ -356,6 +357,7 @@ const AssistantMessageRow = memo(
       e.preventDefault();
       handleLongPress(e.clientX, e.clientY);
     };
+    */
 
     const renderActions = () => (
       <div className="ba-message-actions">
@@ -437,13 +439,13 @@ const AssistantMessageRow = memo(
       return (
         <div
           className="ba-message-row is-assistant"
-          onPointerDown={onPointerDown}
-          onPointerUp={onPointerUp}
-          onPointerLeave={onPointerUp}
-          onContextMenu={onContextMenu}
+          // onPointerDown={onPointerDown}
+          // onPointerUp={onPointerUp}
+          // onPointerLeave={onPointerUp}
+          // onContextMenu={onContextMenu}
         >
           <img className="ba-message-avatar" src={ARONA_AVATAR_SRC} alt="Arona" />
-          <div className={`ba-message is-assistant ${menuPos ? "is-interacting" : ""} ${isJelly ? "ba-message-jelly" : ""} bubble-style-${aronaBubbleStyle}`}>
+          <div className={`ba-message is-assistant bubble-style-${aronaBubbleStyle}`}>
             <div className="ba-message-head">
               <div className="ba-message-label">Arona</div>
             </div>
@@ -514,6 +516,8 @@ const AssistantMessageRow = memo(
               {messageTime && <div className="ba-message-time">{messageTime}</div>}
             </div>
           </div>
+          {/* Floating long-press action menu disabled for ethereal-light theme */}
+          {/*
           {menuPos && createPortal(
             <>
               <div
@@ -555,6 +559,7 @@ const AssistantMessageRow = memo(
             </>,
             document.body
           )}
+          */}
         </div>
       );
     }
