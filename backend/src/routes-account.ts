@@ -160,6 +160,7 @@ import {
   normalizeMaxOutputTokens,
   normalizeDailyBudgetUsd,
   normalizeTemporaryDailyBudgetUsd,
+  DEFAULT_DAILY_BUDGET_USD,
   normalizeWebSearchEnabled,
   normalizeWebSearchMaxResults,
   normalizeAttachmentMode,
@@ -1061,7 +1062,7 @@ app.get("/api/sessions/:id/messages", async (c) => {
         total_cost_usd: Number(row.total_cost_usd ?? 0),
         total_self_added_cost_usd: Number(row.total_self_added_cost_usd ?? 0),
         daily_budget_enabled: enabledSetting === undefined ? true : (enabledSetting === "1" || enabledSetting === "true"),
-        daily_budget_usd: usdSetting === undefined ? 4 : normalizeDailyBudgetUsd(usdSetting),
+        daily_budget_usd: usdSetting === undefined ? DEFAULT_DAILY_BUDGET_USD : normalizeDailyBudgetUsd(usdSetting),
       };
     });
 

@@ -956,6 +956,15 @@ function App() {
             >
               <Menu size={20} />
             </button>
+            <button
+              type="button"
+              className="ba-menu-btn-circular fixed top-6 left-[72px] z-[26]"
+              onClick={triggerNewSession}
+              aria-label="New chat"
+              title="New chat"
+            >
+              <MessageSquarePlus size={20} />
+            </button>
           </>
         ) : (
           <header className="ba-topbar" style={topbarStyle}>

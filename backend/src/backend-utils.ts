@@ -2640,12 +2640,18 @@ export const normalizeServiceTier = (value: string | null | undefined): ServiceT
   return "default";
 };
 
+export const DEFAULT_MAX_OUTPUT_TOKENS = 64000;
+export const DEFAULT_DAILY_BUDGET_USD = 10;
+
 export const normalizeMaxOutputTokens = (value: string | null | undefined): number => {
+  if (value === null || value === undefined || String(value).trim().length === 0) {
+    return DEFAULT_MAX_OUTPUT_TOKENS;
+  }
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
-    return 9216; // 9 * 1024
+    return DEFAULT_MAX_OUTPUT_TOKENS;
   }
-  const rounded = Math.min(64000, Math.max(1, Math.round(parsed)));
+  const rounded = Math.min(DEFAULT_MAX_OUTPUT_TOKENS, Math.max(1, Math.round(parsed)));
   if (rounded < 1024) {
     return rounded;
   }
@@ -2653,8 +2659,11 @@ export const normalizeMaxOutputTokens = (value: string | null | undefined): numb
 };
 
 export const normalizeDailyBudgetUsd = (value: string | null | undefined): number => {
+  if (value === null || value === undefined || String(value).trim().length === 0) {
+    return DEFAULT_DAILY_BUDGET_USD;
+  }
   const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return 4;
+  if (!Number.isFinite(parsed)) return DEFAULT_DAILY_BUDGET_USD;
   return Math.min(1000000, Math.max(0.01, Number(parsed.toFixed(4))));
 };
 

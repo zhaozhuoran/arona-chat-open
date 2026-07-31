@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, memo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useShallow } from "zustand/react/shallow";
 import type { MouseEvent, PointerEvent } from "react";
-import { FileText, MoreHorizontal } from "lucide-react";
+import { FileText, MoreHorizontal, Copy, RefreshCw, ChevronLeft, ChevronRight, ArrowDown } from "lucide-react";
 import type { Message, MessageAttachment } from "@arona-chat/shared";
 import { useStore } from "../store/useStore";
 import { LazyMarkdown } from "./LazyMarkdown";
@@ -457,11 +457,62 @@ const AssistantMessageRow = memo(
             <div className="ba-markdown" onMouseUp={(event) => onCaptureSelection(event, message.id)}>
               <LazyMarkdown content={normalizeMessageMarkdown(message.content)} />
             </div>
-            {messageTime && (
-              <div className="ba-message-actions">
-                <div className="ba-message-time">{messageTime}</div>
+            <div className="ba-message-actions">
+              <div className="ba-ethereal-actions">
+                <button
+                  type="button"
+                  className="ba-message-action-trigger"
+                  aria-label="Copy message"
+                  onClick={() => onCopyText(message.content)}
+                >
+                  <Copy size={14} />
+                </button>
+                {canRegenerate ? (
+                  <button
+                    type="button"
+                    className="ba-message-action-trigger"
+                    aria-label="Regenerate message"
+                    onClick={() => onRegenerate(group.groupKey, group.messages.length)}
+                  >
+                    <RefreshCw size={14} />
+                  </button>
+                ) : null}
+                {canSwitchVersion ? (
+                  <span className="ba-message-version-controls">
+                    <button
+                      type="button"
+                      className="ba-message-action-trigger"
+                      aria-label="Previous version"
+                      disabled={selectedIndex <= 0}
+                      onClick={() => onSetSelectedIndex(group.groupKey, Math.max(0, selectedIndex - 1))}
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                    <span
+                      className="ba-message-version-indicator"
+                      title={`Version ${selectedIndex + 1} of ${group.messages.length}`}
+                    >
+                      {selectedIndex + 1}/{group.messages.length}
+                    </span>
+                    <button
+                      type="button"
+                      className="ba-message-action-trigger"
+                      aria-label="Next version"
+                      disabled={selectedIndex >= group.messages.length - 1}
+                      onClick={() => onSetSelectedIndex(group.groupKey, Math.min(group.messages.length - 1, selectedIndex + 1))}
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </span>
+                ) : null}
+                {isQuoteSelected ? (
+                  <button type="button" className="ba-message-action-secondary" onClick={onApplyQuoteSelection}>
+                    Quote Selection
+                  </button>
+                ) : null}
               </div>
-            )}
+              {messageTime && <div className="ba-message-time">{messageTime}</div>}
+            </div>
           </div>
           {menuPos && createPortal(
             <>
@@ -986,6 +1037,30 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
         <div className="ba-chatlog-content">
       {visibleMessages.length === 0 && !loadingMessages && (
         <div className="ba-chatlog-empty">
+          {theme === "ethereal-light" && (
+            <span className="ba-empty-orb" aria-hidden="true">
+              <svg viewBox="0 0 40 40">
+                <defs>
+                  <filter id="ethereal-blob-empty">
+                    <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="5">
+                      <animate attributeName="baseFrequency" dur="16s" values="0.02;0.03;0.02" repeatCount="indefinite" />
+                    </feTurbulence>
+                    <feDisplacementMap in="SourceGraphic" scale="6" />
+                  </filter>
+                  <radialGradient id="ethereal-glow-empty">
+                    <stop offset="0%" stopColor="#77DEFF" />
+                    <stop offset="100%" stopColor="#FFF1F8" />
+                  </radialGradient>
+                </defs>
+                <path
+                  transform="translate(0, 4)"
+                  filter="url(#ethereal-blob-empty)"
+                  fill="url(#ethereal-glow-empty)"
+                  d="M20 4c8 0 16 4 16 12s-6 12-14 12-16-4-16-12 6-12 14-12z"
+                />
+              </svg>
+            </span>
+          )}
           <p className="ba-chatlog-empty-title">Sensei, welcome back.</p>
           <p className="ba-chatlog-empty-subtitle">Start a new conversation or pick one from the sidebar.</p>
         </div>
@@ -1182,7 +1257,7 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
       {theme === "ethereal-light" && hasStreamingAssistant && isUserScrolledUp && (
         <div className="ba-scroll-to-bottom-wrap">
           <button type="button" className="ba-scroll-to-bottom-btn" onClick={scrollToBottom}>
-            <span className="ba-scroll-to-bottom-icon">⬇</span>
+            <ArrowDown size={16} className="ba-scroll-to-bottom-icon" />
             New Messages
           </button>
         </div>

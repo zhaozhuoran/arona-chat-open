@@ -229,8 +229,8 @@ export const SERVICE_TIER_MULTIPLIERS: Record<string, number> = {
 const DEFAULT_CHAT_SETTINGS: ChatGenerationSettings = {
   service_tier: "default",
   reasoning_effort: "default",
-  max_output_tokens: 9000,
-  daily_budget_usd: 4,
+  max_output_tokens: 64000,
+  daily_budget_usd: 10,
   temporary_daily_budget_usd: null,
   temporary_daily_budget_date_utc: null,
   web_search_enabled: false,
@@ -384,7 +384,7 @@ const normalizeServiceTier = (value: unknown): ServiceTier => {
 
 const normalizeChatSettings = (value: Partial<ChatGenerationSettings> | null | undefined): ChatGenerationSettings => {
   const maxOutputTokensRaw = Number(value?.max_output_tokens);
-  let maxOutputTokens = Number.isFinite(maxOutputTokensRaw) ? Math.min(64000, Math.max(1, Math.round(maxOutputTokensRaw))) : 9216;
+  let maxOutputTokens = Number.isFinite(maxOutputTokensRaw) ? Math.min(64000, Math.max(1, Math.round(maxOutputTokensRaw))) : 64000;
   if (maxOutputTokens >= 1024) {
     maxOutputTokens = Math.round(maxOutputTokens / 1024) * 1024;
   }
@@ -397,7 +397,7 @@ const normalizeChatSettings = (value: Partial<ChatGenerationSettings> | null | u
     service_tier: normalizeServiceTier(value?.service_tier),
     reasoning_effort: normalizeReasoningEffort(value?.reasoning_effort),
     max_output_tokens: maxOutputTokens,
-    daily_budget_usd: Number.isFinite(Number(value?.daily_budget_usd)) ? Math.max(0.01, Number(value?.daily_budget_usd)) : 4,
+    daily_budget_usd: Number.isFinite(Number(value?.daily_budget_usd)) ? Math.max(0.01, Number(value?.daily_budget_usd)) : 10,
     temporary_daily_budget_usd: temporaryBudgetActive ? temporaryBudget : null,
     temporary_daily_budget_date_utc: temporaryBudgetActive ? temporaryDate : null,
     web_search_enabled: Boolean(value?.web_search_enabled),
@@ -430,7 +430,7 @@ const calcBudgetStatus = (
     };
   }
   const temporaryBudgetActive = settings.temporary_daily_budget_usd !== null;
-  const budget = Number(temporaryBudgetActive ? settings.temporary_daily_budget_usd : (settings.daily_budget_usd ?? 4));
+  const budget = Number(temporaryBudgetActive ? settings.temporary_daily_budget_usd : (settings.daily_budget_usd ?? 10));
   const remaining = Math.max(0, budget - spent);
   const model = models.find((m) => m.id === selectedModel);
   const multiplier = SERVICE_TIER_MULTIPLIERS[settings.service_tier] || 1.0;
@@ -458,7 +458,7 @@ const resolveMaxOutputTokensOverride = (
   settings: ChatGenerationSettings,
   budgetStatus: DailyBudgetStatus,
 ): number => {
-  const configuredMax = Math.max(1, Math.min(64000, Math.round(Number(settings.max_output_tokens) || 9216)));
+  const configuredMax = Math.max(1, Math.min(64000, Math.round(Number(settings.max_output_tokens) || 64000)));
   const availableMax = budgetStatus.available_output_tokens;
   let resultVal: number;
   if (!Number.isFinite(availableMax)) {

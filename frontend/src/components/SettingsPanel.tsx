@@ -1219,7 +1219,7 @@ export const SettingsPanel = ({
 
               {userLimits && userLimits.enabled && (
                 <div className="ba-daily-usage-overview mt-4 pt-4 border-t border-dashed border-[#e8f3ee]">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider mb-3 text-[#2265bb] flex items-center gap-1.5">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider mb-3 text-[var(--arona-text-s)] flex items-center gap-1.5">
                     Resource Quota Limits
                   </h4>
 

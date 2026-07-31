@@ -405,9 +405,13 @@ export const ChatInputArea = () => {
             document.body,
           )
         : null}
-      {theme !== "ethereal-light" && (
+      {theme !== "ethereal-light" ? (
         <p className="ba-composer-hint">
           {sendShortcut === "ctrl_enter" ? "Enter for newline, Ctrl/⌘ + Enter to send." : "Enter to send, Shift + Enter for newline."}
+        </p>
+      ) : (
+        <p className="ba-composer-hint">
+          {sendShortcut === "ctrl_enter" ? "Ctrl/⌘ + Enter to send" : "Enter to send · Shift + Enter for newline"}
         </p>
       )}
     </div>

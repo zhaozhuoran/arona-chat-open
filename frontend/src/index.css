@@ -46,7 +46,7 @@
   --arona-text-on-accent: #FFFFFF;
 
   /* Semantic Colors */
-  --arona-success: #10B981;
+  --arona-success: #FF43C8;
   --arona-warning: #F59E0B;
   --arona-error: #EF4444;
   --arona-info: #3B82F6;
@@ -56,6 +56,16 @@
   --arona-shadow-md: 0 8px 16px -4px rgba(15, 23, 42, 0.04);
   --arona-shadow-lg: 0 12px 32px -8px rgba(15, 23, 42, 0.08);
   --arona-shadow-xl: 0 20px 48px -12px rgba(15, 23, 42, 0.12);
+
+  /* Radius scale (fixed) */
+  --arona-radius-sm: 8px;
+  --arona-radius-md: 12px;
+  --arona-radius-lg: 16px;
+  --arona-radius-xl: 20px;
+  --arona-radius-full: 9999px;
+
+  /* Focus */
+  --arona-glow-focus: 0 0 0 3px color-mix(in srgb, var(--arona-accent-primary) 18%, transparent);
 
   --app-bg: var(--arona-bg);
 }
@@ -192,8 +202,8 @@ body.theme-ethereal-light {
 }
 
 .theme-ethereal-light .ba-session-item.is-active {
-  background: var(--arona-soft-blue);
-  color: var(--arona-accent-blue);
+  background: var(--arona-soft-pink);
+  color: var(--arona-text-p);
 }
 
 .theme-ethereal-light .ba-session-item.is-active::before {
@@ -204,7 +214,7 @@ body.theme-ethereal-light {
   transform: translateY(-50%);
   width: 4px;
   height: 16px;
-  background: var(--arona-accent-secondary);
+  background: var(--arona-accent-primary);
   border-radius: 0 4px 4px 0;
 }
 
@@ -633,6 +643,9 @@ body.theme-ethereal-light {
 .theme-ethereal-light .ba-composer-hint {
   text-align: center;
   margin-top: 12px;
+  color: var(--arona-text-t);
+  font-size: 0.7rem;
+  opacity: 0.75;
 }
 
 /* Settings & Modals */
@@ -3100,7 +3113,10 @@ select {
 .ba-loader__bg {
   position: absolute;
   inset: 0;
-  background: url('https://webcnstatic.yostar.net/ba_cn_web/prod/web/assets/loading_bg_pc.ba246778.png') center / cover no-repeat, #f0f7ff;
+  background:
+    radial-gradient(120% 90% at 50% 12%, rgba(255, 241, 248, 0.9) 0%, transparent 55%),
+    radial-gradient(120% 90% at 50% 100%, rgba(240, 249, 255, 0.9) 0%, transparent 55%),
+    #F8FAFC;
 }
 
 .ba-loader__info {
@@ -3114,9 +3130,21 @@ select {
 
 .ba-loader__title {
   margin: 0;
+  font-family: "Inter", "Nunito Sans", system-ui, sans-serif;
+  color: #FF43C8;
+  font-size: clamp(26px, 1.8vw, 36px);
+  letter-spacing: 0.02em;
+  font-weight: 600;
+}
+
+/* BlueArchive (standard) theme Loading page overrides */
+.theme-standard .ba-loader__bg {
+  background: url('https://webcnstatic.yostar.net/ba_cn_web/prod/web/assets/loading_bg_pc.ba246778.png') center / cover no-repeat, #f0f7ff;
+}
+
+.theme-standard .ba-loader__title {
   font-family: 'BA-Title', system-ui;
   color: #1289f9;
-  font-size: clamp(26px, 1.8vw, 36px);
   letter-spacing: 0.04em;
   font-weight: 400;
 }
@@ -3358,12 +3386,741 @@ select {
   .theme-ethereal-light .ba-streaming-dot,
   .ba-message-jelly,
   .ba-floating-menu,
-  .ba-buffered-reveal,
-  .ba-fade-up,
-  .theme-ethereal-light .ba-thinking-orb {
+    .ba-buffered-reveal,
+    .ba-fade-up,
+    .theme-ethereal-light .ba-thinking-orb,
+    .theme-ethereal-light .ba-empty-orb {
     animation: none !important;
   }
   .theme-ethereal-light .ba-message {
     animation: none !important;
+  }
+}
+
+/* =====================================================================
+   ETHEREAL LIGHT — SYSTEM COMPLETION (review remediation)
+   Re-skins surfaces that previously fell back to the Blue Archive theme.
+   ===================================================================== */
+
+/* ---- Phase 1: First-run path (boot / transition / auth) ---- */
+
+.theme-ethereal-light .ba-loader__bg {
+  background:
+    radial-gradient(120% 90% at 50% 12%, rgba(255, 241, 248, 0.9) 0%, transparent 55%),
+    radial-gradient(120% 90% at 50% 100%, rgba(240, 249, 255, 0.9) 0%, transparent 55%),
+    var(--arona-bg);
+}
+
+.theme-ethereal-light .ba-loader__title {
+  font-family: "Inter", "Nunito Sans", system-ui, sans-serif;
+  color: var(--arona-accent-primary);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.theme-ethereal-light .ba-transition-curtain {
+  background: var(--arona-bg);
+}
+
+.theme-ethereal-light .ba-transition-curtain img {
+  opacity: 0.9;
+  filter: drop-shadow(0 8px 24px rgba(255, 67, 200, 0.15));
+}
+
+.theme-ethereal-light .ba-auth-card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--arona-border-soft);
+  backdrop-filter: blur(16px);
+  box-shadow: var(--arona-shadow-xl);
+  border-radius: var(--arona-radius-xl);
+}
+
+.theme-ethereal-light .ba-auth-avatar {
+  border: 3px solid var(--arona-soft-pink);
+}
+
+.theme-ethereal-light .ba-auth-card h1 {
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-auth-card p,
+.theme-ethereal-light .ba-auth-card small,
+.theme-ethereal-light .ba-auth-denied-message {
+  color: var(--arona-text-s);
+}
+
+.theme-ethereal-light .ba-auth-field span {
+  color: var(--arona-text-t);
+}
+
+.theme-ethereal-light .ba-auth-field input {
+  border: 1px solid var(--arona-border-soft);
+  border-radius: var(--arona-radius-md);
+  background: var(--arona-surface);
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-auth-field input:focus-visible {
+  outline: none;
+  border-color: var(--arona-border-medium);
+  box-shadow: var(--arona-glow-focus);
+}
+
+.theme-ethereal-light .ba-auth-button {
+  border: 1px solid var(--arona-border-soft);
+  border-radius: var(--arona-radius-md);
+  background: var(--arona-surface);
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-auth-button.primary {
+  border-color: transparent;
+  background: var(--arona-accent-primary);
+  color: var(--arona-text-on-accent);
+  box-shadow: 0 4px 12px rgba(255, 67, 200, 0.25);
+}
+
+.theme-ethereal-light .ba-auth-button.primary:not(:disabled):hover {
+  box-shadow: 0 6px 16px rgba(255, 67, 200, 0.4);
+}
+
+.theme-ethereal-light .ba-auth-text-trigger {
+  color: var(--arona-accent-blue);
+}
+
+.theme-ethereal-light .ba-auth-preview-notice {
+  background: var(--arona-soft-pink);
+  border: 1px solid #FFD6EC;
+  color: var(--arona-text-p);
+}
+
+/* ---- Phase 2: Settings panel interior ---- */
+
+.theme-ethereal-light .ba-settings-card {
+  color: var(--arona-text-p);
+  backdrop-filter: none;
+  border-radius: var(--arona-radius-lg);
+}
+
+.theme-ethereal-light .ba-settings-card:hover {
+  border-color: var(--arona-border-medium);
+  box-shadow: var(--arona-shadow-md);
+}
+
+.theme-ethereal-light .ba-settings-card h3,
+.theme-ethereal-light .ba-settings-card h4,
+.theme-ethereal-light .ba-settings-card h5 {
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-settings-header {
+  border-bottom-color: var(--arona-border-soft);
+}
+
+.theme-ethereal-light .ba-settings-header span {
+  color: var(--arona-text-t);
+}
+
+.theme-ethereal-light .ba-settings-header button {
+  background: var(--arona-elevated);
+  color: var(--arona-text-s);
+}
+
+.theme-ethereal-light .ba-settings-header button:hover {
+  background: var(--arona-border-soft);
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-settings-tabs {
+  border-bottom-color: var(--arona-border-soft);
+}
+
+.theme-ethereal-light .ba-settings-tab {
+  color: var(--arona-text-t);
+  background: transparent;
+}
+
+.theme-ethereal-light .ba-settings-tab:hover {
+  color: var(--arona-text-p);
+  background: var(--arona-elevated);
+}
+
+.theme-ethereal-light .ba-settings-field span {
+  color: var(--arona-text-s);
+}
+
+.theme-ethereal-light .ba-settings-field small {
+  color: var(--arona-text-t);
+}
+
+.theme-ethereal-light .ba-settings-field input,
+.theme-ethereal-light .ba-settings-field select {
+  border: 1px solid var(--arona-border-soft);
+  border-radius: var(--arona-radius-sm);
+  background: var(--arona-surface);
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-settings-field input:focus-visible,
+.theme-ethereal-light .ba-settings-field select:focus-visible {
+  outline: none;
+  border-color: var(--arona-border-medium);
+  box-shadow: var(--arona-glow-focus);
+}
+
+.theme-ethereal-light .ba-settings-divider {
+  border-top-color: var(--arona-border-soft);
+}
+
+.theme-ethereal-light .ba-toggle-field {
+  color: var(--arona-text-s);
+}
+
+.theme-ethereal-light .ba-toggle-field input[type="checkbox"] {
+  accent-color: var(--arona-accent-primary);
+}
+
+.theme-ethereal-light .ba-muted-text {
+  color: var(--arona-text-t);
+}
+
+.theme-ethereal-light .ba-settings-action {
+  color: var(--arona-text-p);
+  border: 1px solid var(--arona-border-soft);
+  background: var(--arona-surface);
+  border-radius: var(--arona-radius-md);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.theme-ethereal-light .ba-settings-action:hover:not(:disabled) {
+  border-color: var(--arona-accent-primary);
+  box-shadow: var(--arona-shadow-sm);
+}
+
+.theme-ethereal-light .ba-settings-action.is-danger {
+  color: var(--arona-error);
+  border-color: #FECACA;
+  background: #FEF2F2;
+}
+
+.theme-ethereal-light .ba-settings-action.is-danger:hover {
+  background: #FEE2E2;
+}
+
+.theme-ethereal-light .ba-settings-action.is-secondary {
+  color: var(--arona-text-s);
+  background: var(--arona-elevated);
+}
+
+.theme-ethereal-light .ba-settings-action-link {
+  border: 1px solid var(--arona-border-soft);
+  border-radius: var(--arona-radius-sm);
+  background: var(--arona-surface);
+  color: var(--arona-text-s);
+}
+
+.theme-ethereal-light .ba-settings-action-link:hover {
+  border-color: var(--arona-accent-primary);
+  background: var(--arona-elevated);
+}
+
+.theme-ethereal-light .ba-file-upload span {
+  border: 1px solid var(--arona-border-soft);
+  border-radius: var(--arona-radius-sm);
+  background: var(--arona-surface);
+  color: var(--arona-text-s);
+}
+
+.theme-ethereal-light .ba-profile-row img {
+  border: 2px solid var(--arona-soft-pink);
+}
+
+.theme-ethereal-light .ba-settings-footer {
+  border-top-color: var(--arona-border-soft);
+  color: var(--arona-text-t);
+}
+
+/* Passkeys / workspaces list */
+.theme-ethereal-light .ba-passkey-item {
+  border: 1px solid var(--arona-border-soft);
+  background: var(--arona-surface);
+  border-radius: var(--arona-radius-md);
+}
+
+.theme-ethereal-light .ba-passkey-item strong {
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-passkey-item span {
+  color: var(--arona-text-t);
+}
+
+.theme-ethereal-light .ba-passkey-item button {
+  background: var(--arona-elevated);
+  color: var(--arona-text-s);
+  border-radius: var(--arona-radius-sm);
+}
+
+.theme-ethereal-light .ba-passkey-item button:hover:not(:disabled) {
+  background: var(--arona-border-soft);
+  color: var(--arona-text-p);
+}
+
+/* Usage */
+.theme-ethereal-light .ba-usage-summary div {
+  background: var(--arona-elevated);
+  border-radius: var(--arona-radius-sm);
+}
+
+.theme-ethereal-light .ba-usage-summary span {
+  color: var(--arona-text-t);
+}
+
+.theme-ethereal-light .ba-usage-summary strong {
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-usage-table {
+  border: 1px solid var(--arona-border-soft);
+  border-radius: var(--arona-radius-sm);
+}
+
+.theme-ethereal-light .ba-usage-table th {
+  background: var(--arona-elevated);
+  color: var(--arona-text-s);
+}
+
+.theme-ethereal-light .ba-usage-table th,
+.theme-ethereal-light .ba-usage-table td {
+  border-bottom-color: var(--arona-border-soft);
+}
+
+.theme-ethereal-light .ba-usage-empty {
+  color: var(--arona-text-t);
+}
+
+.theme-ethereal-light .ba-daily-usage-overview {
+  border: 1px solid var(--arona-border-soft);
+  background: var(--arona-elevated);
+  border-radius: var(--arona-radius-md);
+}
+
+.theme-ethereal-light .ba-daily-usage-head span {
+  color: var(--arona-text-s);
+}
+
+.theme-ethereal-light .ba-daily-usage-head strong {
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-daily-usage-progress {
+  background: var(--arona-border-soft);
+}
+
+.theme-ethereal-light .ba-daily-usage-progress span {
+  background: linear-gradient(90deg, var(--arona-accent-primary), var(--arona-accent-secondary));
+}
+
+.theme-ethereal-light .ba-daily-usage-progress.is-over span {
+  background: linear-gradient(90deg, #FCA5A5, var(--arona-error));
+}
+
+.theme-ethereal-light .ba-daily-usage-meta {
+  color: var(--arona-text-t);
+}
+
+.theme-ethereal-light .ba-usage-limit-hint {
+  background: #FFF7ED;
+  border: 1px solid #FED7AA;
+  color: #9A3412;
+}
+
+/* ---- Phase 3: Global components ---- */
+
+/* Toasts: light frosted with a type-colored accent bar */
+.theme-ethereal-light .ba-toast {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--arona-border-soft);
+  border-left: 3px solid var(--arona-accent-primary);
+  color: var(--arona-text-p);
+  border-radius: var(--arona-radius-md);
+  box-shadow: var(--arona-shadow-lg);
+}
+
+.theme-ethereal-light .ba-toast.success {
+  border-left-color: var(--arona-success);
+}
+
+.theme-ethereal-light .ba-toast.error {
+  border-left-color: var(--arona-error);
+}
+
+/* Loading spinner */
+.theme-ethereal-light .ba-spinner {
+  border-color: var(--arona-border-soft);
+  border-top-color: var(--arona-accent-primary);
+}
+
+/* Rename modal */
+.theme-ethereal-light .ba-rename-modal {
+  border: 1px solid var(--arona-border-soft);
+  background: var(--arona-surface);
+  border-radius: var(--arona-radius-lg);
+  box-shadow: var(--arona-shadow-xl);
+}
+
+.theme-ethereal-light .ba-rename-modal h3 {
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-rename-modal-label {
+  color: var(--arona-text-s);
+}
+
+.theme-ethereal-light .ba-rename-modal input {
+  border: 1px solid var(--arona-border-soft);
+  background: var(--arona-surface);
+  color: var(--arona-text-p);
+  border-radius: var(--arona-radius-sm);
+}
+
+.theme-ethereal-light .ba-rename-modal input:focus-visible {
+  outline: none;
+  border-color: var(--arona-border-medium);
+  box-shadow: var(--arona-glow-focus);
+}
+
+.theme-ethereal-light .ba-rename-modal-actions button {
+  background: var(--arona-accent-primary);
+  color: var(--arona-text-on-accent);
+  border-radius: var(--arona-radius-sm);
+}
+
+.theme-ethereal-light .ba-rename-modal-actions button.is-secondary {
+  background: var(--arona-elevated);
+  color: var(--arona-text-s);
+}
+
+/* Stream recovery card */
+.theme-ethereal-light .ba-stream-recovery {
+  border: 1px solid var(--arona-border-soft);
+  background: var(--arona-surface);
+  border-radius: var(--arona-radius-lg);
+  box-shadow: var(--arona-shadow-md);
+}
+
+.theme-ethereal-light .ba-stream-recovery-text strong {
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-stream-recovery-text span {
+  color: var(--arona-text-t);
+}
+
+.theme-ethereal-light .ba-stream-recovery-actions button {
+  background: var(--arona-elevated);
+  color: var(--arona-text-s);
+  border-radius: var(--arona-radius-full);
+}
+
+.theme-ethereal-light .ba-stream-recovery-actions button:hover:not(:disabled) {
+  background: var(--arona-border-soft);
+  color: var(--arona-text-p);
+}
+
+/* Message action controls + version menu */
+.theme-ethereal-light .ba-message-action-trigger,
+.theme-ethereal-light .ba-message-action-secondary {
+  border: 1px solid var(--arona-border-soft);
+  background: var(--arona-surface);
+  color: var(--arona-text-s);
+}
+
+.theme-ethereal-light .ba-message-action-trigger:hover,
+.theme-ethereal-light .ba-message-action-secondary:hover {
+  border-color: var(--arona-border-medium);
+  background: var(--arona-elevated);
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-message-version-indicator {
+  color: var(--arona-text-t);
+}
+
+.theme-ethereal-light .ba-message-menu {
+  border: 1px solid var(--arona-border-soft);
+  background: rgba(255, 255, 255, 0.98);
+  border-radius: var(--arona-radius-md);
+  box-shadow: var(--arona-shadow-lg);
+}
+
+.theme-ethereal-light .ba-message-menu button {
+  color: var(--arona-text-s);
+}
+
+.theme-ethereal-light .ba-message-menu button:hover {
+  background: var(--arona-elevated);
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-message-menu button:disabled {
+  color: var(--arona-text-t);
+}
+
+/* Error message (failed stream) */
+.theme-ethereal-light .ba-message.is-assistant.is-error {
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: var(--arona-radius-lg);
+  padding: 12px 16px;
+}
+
+.theme-ethereal-light .ba-message-failure-note {
+  color: var(--arona-error);
+}
+
+/* Session list "Load More" */
+.theme-ethereal-light .ba-session-list-more {
+  background: var(--arona-surface);
+  border: 1px dashed var(--arona-border-medium);
+  color: var(--arona-text-s);
+  border-radius: var(--arona-radius-sm);
+}
+
+.theme-ethereal-light .ba-session-list-more:hover:not(:disabled) {
+  background: var(--arona-elevated);
+  border-color: var(--arona-accent-primary);
+}
+
+/* Centered regenerate button */
+.theme-ethereal-light .ba-chatlog-regenerate-btn {
+  border: 1px solid var(--arona-border-soft);
+  background: var(--arona-surface);
+  color: var(--arona-text-s);
+  border-radius: var(--arona-radius-full);
+}
+
+.theme-ethereal-light .ba-chatlog-regenerate-btn:hover {
+  border-color: var(--arona-accent-primary);
+  background: var(--arona-elevated);
+  color: var(--arona-text-p);
+}
+
+/* Empty chat base colors (further polished in Phase 6) */
+.theme-ethereal-light .ba-chatlog-empty {
+  color: var(--arona-text-t);
+  gap: 18px;
+  min-height: 320px;
+  position: relative;
+}
+
+.theme-ethereal-light .ba-chatlog-empty::before {
+  content: "";
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  width: 420px;
+  height: 420px;
+  max-width: 80vw;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(255, 241, 248, 0.7) 0%, rgba(240, 249, 255, 0.4) 40%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.theme-ethereal-light .ba-empty-orb {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  width: 72px;
+  height: 72px;
+  filter: drop-shadow(0 8px 24px rgba(119, 222, 255, 0.35));
+  animation: ba-orb-rotate 24s linear infinite;
+}
+
+.theme-ethereal-light .ba-empty-orb svg {
+  width: 100%;
+  height: 100%;
+}
+
+.theme-ethereal-light .ba-chatlog-empty-title {
+  position: relative;
+  z-index: 1;
+  color: var(--arona-text-p);
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.theme-ethereal-light .ba-chatlog-empty-subtitle {
+  position: relative;
+  z-index: 1;
+  color: var(--arona-text-s);
+  font-size: 0.95rem;
+}
+
+/* Composer attachment cards */
+.theme-ethereal-light .ba-attachment-card {
+  border: 1px solid var(--arona-border-soft);
+  background: var(--arona-surface);
+  border-radius: var(--arona-radius-md);
+}
+
+.theme-ethereal-light .ba-attachment-card.is-uploading {
+  border-color: var(--arona-accent-secondary);
+}
+
+.theme-ethereal-light .ba-attachment-card.is-error {
+  border-color: var(--arona-error);
+}
+
+.theme-ethereal-light .ba-attachment-thumb {
+  background: var(--arona-elevated);
+}
+
+.theme-ethereal-light .ba-attachment-thumb-file {
+  color: var(--arona-text-s);
+}
+
+.theme-ethereal-light .ba-attachment-name {
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-attachment-status {
+  color: var(--arona-text-t);
+}
+
+.theme-ethereal-light .ba-attachment-remove {
+  background: var(--arona-elevated);
+  color: var(--arona-text-s);
+  border-radius: var(--arona-radius-sm);
+}
+
+.theme-ethereal-light .ba-attachment-remove:hover {
+  background: var(--arona-border-soft);
+  color: var(--arona-text-p);
+}
+
+/* Composer attachment menu */
+.theme-ethereal-light .ba-composer-attachment-menu button {
+  background: var(--arona-elevated);
+  color: var(--arona-text-s);
+  border-radius: var(--arona-radius-sm);
+}
+
+.theme-ethereal-light .ba-composer-attachment-menu button:hover:not(:disabled) {
+  background: var(--arona-border-soft);
+  color: var(--arona-text-p);
+}
+
+/* Attachment / library panels */
+.theme-ethereal-light .ba-attachment-library-header {
+  border-bottom-color: var(--arona-border-soft);
+}
+
+.theme-ethereal-light .ba-attachment-library-header p {
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-attachment-library-header span {
+  color: var(--arona-text-t);
+}
+
+.theme-ethereal-light .ba-attachment-library-header-actions button {
+  background: var(--arona-elevated);
+  color: var(--arona-text-s);
+}
+
+.theme-ethereal-light .ba-attachment-library-header-actions button:hover {
+  background: var(--arona-border-soft);
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-attachment-library-item {
+  border: 1px solid var(--arona-border-soft);
+  background: var(--arona-surface);
+  border-radius: var(--arona-radius-md);
+}
+
+.theme-ethereal-light .ba-attachment-library-item-meta p {
+  color: var(--arona-text-p);
+}
+
+.theme-ethereal-light .ba-attachment-library-item-meta span {
+  color: var(--arona-text-t);
+}
+
+.theme-ethereal-light .ba-attachment-library-item-actions a,
+.theme-ethereal-light .ba-attachment-library-item-actions button {
+  background: var(--arona-elevated);
+  color: var(--arona-text-s);
+  border-radius: var(--arona-radius-sm);
+}
+
+.theme-ethereal-light .ba-attachment-library-item-actions a:hover,
+.theme-ethereal-light .ba-attachment-library-item-actions button:hover:not(:disabled) {
+  background: var(--arona-border-soft);
+  color: var(--arona-text-p);
+}
+
+/* In-message reasoning + attachments */
+.theme-ethereal-light .ba-message-reasoning {
+  border: 1px dashed var(--arona-border-medium);
+  background: var(--arona-elevated);
+  border-radius: var(--arona-radius-sm);
+}
+
+.theme-ethereal-light .ba-message-reasoning summary {
+  color: var(--arona-text-s);
+}
+
+.theme-ethereal-light .ba-message-reasoning pre {
+  color: var(--arona-text-s);
+}
+
+.theme-ethereal-light .ba-message-attachment {
+  border: 1px solid var(--arona-border-soft);
+  background: var(--arona-surface);
+  color: var(--arona-text-s);
+  border-radius: var(--arona-radius-sm);
+}
+
+.theme-ethereal-light .ba-message-attachment:hover {
+  border-color: var(--arona-accent-primary);
+}
+
+.theme-ethereal-light .ba-message-attachment-icon {
+  background: var(--arona-elevated);
+}
+
+/* ---- Phase 5: Message action discoverability ---- */
+
+.theme-ethereal-light .ba-message-row.is-assistant .ba-message-actions {
+  gap: 10px;
+  align-items: center;
+}
+
+.theme-ethereal-light .ba-ethereal-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.theme-ethereal-light .ba-message-row.is-assistant:hover .ba-ethereal-actions,
+.theme-ethereal-light .ba-message-row.is-assistant:focus-within .ba-ethereal-actions {
+  opacity: 1;
+}
+
+.theme-ethereal-light .ba-message-version-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+@media (hover: none) {
+  .theme-ethereal-light .ba-ethereal-actions {
+    opacity: 1;
   }
 }

@@ -14,8 +14,8 @@ const IS_CLERK_AVAILABLE = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
 
 const clerkAppearance = {
   variables: {
-    colorPrimary: "#0f62a6",
-    colorText: "#0d314f",
+    colorPrimary: "#FF43C8",
+    colorText: "#0F172A",
     colorBackground: "transparent",
   },
   elements: {
@@ -77,7 +77,7 @@ export const AuthPanel = ({ loading, previewAvailable, onPasswordLogin }: AuthPa
 
         {isClerkAvailable && (
           <>
-            <div className="ba-auth-divider" style={{ width: "100%", height: "1px", background: "rgba(15, 98, 166, 0.1)", margin: "1rem 0" }} />
+            <div className="ba-auth-divider" style={{ width: "100%", height: "1px", background: "rgba(15, 23, 42, 0.08)", margin: "1rem 0" }} />
             <div className="ba-auth-tabs" style={{ display: "flex", width: "100%", gap: "0.5rem", marginBottom: "0.5rem" }}>
               <button
                 type="button"
@@ -86,9 +86,9 @@ export const AuthPanel = ({ loading, previewAvailable, onPasswordLogin }: AuthPa
                   flex: 1,
                   padding: "0.5rem",
                   borderRadius: "8px",
-                  border: "1px solid rgba(15, 98, 166, 0.2)",
-                  background: clerkMode === "signin" ? "#0f62a6" : "transparent",
-                  color: clerkMode === "signin" ? "#fff" : "#0d314f",
+                  border: "1px solid var(--arona-border-soft)",
+                  background: clerkMode === "signin" ? "#FF43C8" : "transparent",
+                  color: clerkMode === "signin" ? "#fff" : "#475569",
                   fontWeight: 600,
                   cursor: "pointer",
                 }}
@@ -103,9 +103,9 @@ export const AuthPanel = ({ loading, previewAvailable, onPasswordLogin }: AuthPa
                   flex: 1,
                   padding: "0.5rem",
                   borderRadius: "8px",
-                  border: "1px solid rgba(15, 98, 166, 0.2)",
-                  background: clerkMode === "signup" ? "#0f62a6" : "transparent",
-                  color: clerkMode === "signup" ? "#fff" : "#0d314f",
+                  border: "1px solid var(--arona-border-soft)",
+                  background: clerkMode === "signup" ? "#FF43C8" : "transparent",
+                  color: clerkMode === "signup" ? "#fff" : "#475569",
                   fontWeight: 600,
                   cursor: "pointer",
                 }}
