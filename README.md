@@ -6,7 +6,14 @@ English | [简体中文](README-cn.md)
 ![Status](https://img.shields.io/badge/Status-Public--Mirror-orange.svg)
 [![Demo](https://img.shields.io/badge/Demo-Live%20Preview-green.svg)](https://arona-chat-open.pages.dev/login?password=preview&autologin=1)
 
-Arona Chat is a high-performance, lightweight AI chat app inspired by the _Blue Archive_ "Shittim Chest" UI. Built as a monorepo, it leverages the Cloudflare serverless ecosystem (Workers, D1, R2, Durable Objects) to deliver a cost-efficient, stateful chat experience.
+
+AronaChat is a modern, high-performance AI chat application inspired by the Blue Archive “Shittim Chest” UI. It is built on a cloud-native serverless architecture, focusing on efficiency, scalability, and maintainability while keeping infrastructure complexity and operational costs low.
+
+Unlike traditional applications that rely on manually managed servers, AronaChat leverages the Cloudflare serverless ecosystem, including Workers, D1, R2, and Durable Objects, to provide serverless compute, persistent data storage, object storage, and stateful services. This architecture enables a lightweight yet flexible platform that can efficiently handle AI-powered conversations.
+
+Built as a monorepo, AronaChat integrates frontend, backend, and infrastructure components into a unified development workflow. The project is designed with production-oriented principles, including extensibility, reliability, and cost efficiency.
+
+While currently serving personal use and demo testers, AronaChat’s architecture is designed to support future growth into a larger-scale production service with minimal architectural changes.
 
 ## 🧠 System Architecture
 
