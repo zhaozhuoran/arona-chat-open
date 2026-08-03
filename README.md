@@ -3,9 +3,6 @@ English | [简体中文](README-cn.md)
 # 🌸 Arona Chat
 
 ![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)
-![Status](https://img.shields.io/badge/Status-Public--Mirror-orange.svg)
-[![Demo](https://img.shields.io/badge/Demo-Live%20Preview-green.svg)](https://arona-chat-open.pages.dev/login?password=preview&autologin=1)
-
 
 AronaChat is a modern, high-performance AI chat application inspired by the Blue Archive “Shittim Chest” UI. It is built on a cloud-native serverless architecture, focusing on efficiency, scalability, and maintainability while keeping infrastructure complexity and operational costs low.
 
