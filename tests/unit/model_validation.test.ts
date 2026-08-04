@@ -29,10 +29,10 @@ const createMockDb = (activeModels: string[]) => {
 };
 
 test("normalizeMaxOutputTokens snaps to multiples of 1024 unless < 1024", () => {
-  assert.strictEqual(normalizeMaxOutputTokens(undefined), 9216);
-  assert.strictEqual(normalizeMaxOutputTokens(null), 1);
-  assert.strictEqual(normalizeMaxOutputTokens(""), 1);
-  assert.strictEqual(normalizeMaxOutputTokens("foo"), 9216);
+  assert.strictEqual(normalizeMaxOutputTokens(undefined), 64000);
+  assert.strictEqual(normalizeMaxOutputTokens(null), 64000);
+  assert.strictEqual(normalizeMaxOutputTokens(""), 64000);
+  assert.strictEqual(normalizeMaxOutputTokens("foo"), 64000);
 
   // values < 1024 are NOT snapped to multiples of 1024
   assert.strictEqual(normalizeMaxOutputTokens("1"), 1);

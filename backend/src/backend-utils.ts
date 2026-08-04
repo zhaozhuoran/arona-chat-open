@@ -50,7 +50,7 @@ export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 export const DEFAULT_MODEL = "google/gemini-3-flash-preview";
 export const DEFAULT_PASSKEY_RP_NAME = "Arona Chat";
 export const MAX_SESSION_TITLE_LENGTH = 60;
-export const LATEST_SCHEMA_VERSION = 23;
+export const LATEST_SCHEMA_VERSION = 24;
 export const EMPTY_MODEL_TEXT_FALLBACK = " ";
 export const API_FILES_PREFIX_RE = /^\/api\/files\/+/;
 export const AUTHENTICATED_FILE_PROXY_PATH_RE = /\/api\/files\/(?!public(?:\?|$))/;
@@ -1408,6 +1408,15 @@ export const ensureDatabaseReady = async (db: D1Database): Promise<void> => {
           .run();
       }
 
+      if (currentVersion < 24) {
+        await applySchemaV24(db);
+        currentVersion = 24;
+        await db
+          .prepare("UPDATE schema_meta SET version = ?, updated_at = ? WHERE id = 1")
+          .bind(currentVersion, Date.now())
+          .run();
+      }
+
       if (currentVersion > LATEST_SCHEMA_VERSION) {
         throw new Error(`Database schema version ${currentVersion} is newer than backend supported version ${LATEST_SCHEMA_VERSION}.`);
       }
@@ -2039,6 +2048,8 @@ export const requireAuth = async (c: AppContext): Promise<AuthTokenPayload | Res
     const sub = (isAdmin && devAdminShareChat) ? "single-user" : clerkClaims.sub;
     const perms = await getUserPermissions(c.env.D1_DB, sub, isAdmin);
 
+    await ensureProfile(c.env.D1_DB, sub, perms.isAdmin, email);
+
     return {
       sub,
       isAdmin: perms.isAdmin,
@@ -2454,16 +2465,30 @@ export const toPasskeyInfo = (row: PasskeyRow): PasskeyInfo => ({
   last_used_at: row.last_used_at ? Number(row.last_used_at) : null,
 });
 
-export const ensureProfile = async (db: D1Database, userId: string, isAdmin: boolean = false): Promise<void> => {
+export const ensureProfile = async (db: D1Database, userId: string, isAdmin: boolean = false, email?: string | null): Promise<void> => {
   const now = Date.now();
-  await db
-    .prepare(`
-      INSERT INTO profiles (user_id, username, dynamic_background, theme, send_shortcut, is_admin, updated_at)
-      VALUES (?, ?, 1, NULL, 'ctrl_enter', ?, ?)
-      ON CONFLICT(user_id) DO UPDATE SET is_admin = excluded.is_admin, updated_at = excluded.updated_at
-    `)
-    .bind(userId, "Sensei", isAdmin ? 1 : 0, now)
-    .run();
+  if (email !== undefined && email !== null) {
+    await db
+      .prepare(`
+        INSERT INTO profiles (user_id, username, dynamic_background, theme, send_shortcut, is_admin, updated_at, email)
+        VALUES (?, ?, 1, NULL, 'ctrl_enter', ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+          is_admin = excluded.is_admin,
+          updated_at = excluded.updated_at,
+          email = CASE WHEN excluded.email IS NOT NULL THEN excluded.email ELSE profiles.email END
+      `)
+      .bind(userId, "Sensei", isAdmin ? 1 : 0, now, email)
+      .run();
+  } else {
+    await db
+      .prepare(`
+        INSERT INTO profiles (user_id, username, dynamic_background, theme, send_shortcut, is_admin, updated_at)
+        VALUES (?, ?, 1, NULL, 'ctrl_enter', ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET is_admin = excluded.is_admin, updated_at = excluded.updated_at
+      `)
+      .bind(userId, "Sensei", isAdmin ? 1 : 0, now)
+      .run();
+  }
 };
 
 export const readProfile = async (c: AppContext, userId: string, isAdmin: boolean = false): Promise<UserProfile> => {
@@ -3648,6 +3673,10 @@ export const syncUsageAggregate = async (db: D1Database, userId: string): Promis
     .run();
 };
 
+export const applySchemaV24 = async (db: D1Database): Promise<void> => {
+  await addColumnIfMissing(db, "profiles", "email", "TEXT");
+};
+
 export const isModelAllowed = async (
   db: D1Database,
   modelId: string,
@@ -3671,6 +3700,86 @@ export const isModelAllowed = async (
   return true;
 };
 
+export function parseIpv4ToNumber(host: string): number | null {
+  let cleanHost = host.trim();
+  if (cleanHost.endsWith(".")) {
+    cleanHost = cleanHost.slice(0, -1);
+  }
+
+  const parts = cleanHost.split(".");
+  if (parts.length > 4 || parts.length === 0) {
+    return null;
+  }
+
+  const numericParts: number[] = [];
+  for (const part of parts) {
+    if (part === "") {
+      return null;
+    }
+    let val: number;
+    const lowerPart = part.toLowerCase();
+    if (lowerPart.startsWith("0x")) {
+      const hexDigits = part.slice(2);
+      if (!/^[0-9a-fA-F]+$/.test(hexDigits)) {
+        return null;
+      }
+      val = parseInt(hexDigits, 16);
+    } else if (part.startsWith("0") && part.length > 1) {
+      const octalDigits = part.slice(1);
+      if (!/^[0-7]+$/.test(octalDigits)) {
+        return null;
+      }
+      val = parseInt(octalDigits, 8);
+    } else {
+      if (!/^[0-9]+$/.test(part)) {
+        return null;
+      }
+      val = parseInt(part, 10);
+    }
+
+    if (isNaN(val) || val < 0) {
+      return null;
+    }
+    numericParts.push(val);
+  }
+
+  const len = numericParts.length;
+  if (len === 4) {
+    if (numericParts[0] > 255 || numericParts[1] > 255 || numericParts[2] > 255 || numericParts[3] > 255) {
+      return null;
+    }
+    return numericParts[0] * 16777216 + numericParts[1] * 65536 + numericParts[2] * 256 + numericParts[3];
+  } else if (len === 3) {
+    if (numericParts[0] > 255 || numericParts[1] > 255 || numericParts[2] > 65535) {
+      return null;
+    }
+    return numericParts[0] * 16777216 + numericParts[1] * 65536 + numericParts[2];
+  } else if (len === 2) {
+    if (numericParts[0] > 255 || numericParts[1] > 16777215) {
+      return null;
+    }
+    return numericParts[0] * 16777216 + numericParts[1];
+  } else if (len === 1) {
+    if (numericParts[0] > 4294967295) {
+      return null;
+    }
+    return numericParts[0];
+  }
+
+  return null;
+}
+
+export function isUnsafeIpv4(ip: number): boolean {
+  return (
+    (ip >= 0 && ip <= 16777215) || // 0.0.0.0/8 (Local system / Any)
+    (ip >= 167772160 && ip <= 184549375) || // 10.0.0.0/8 (Private A)
+    (ip >= 2130706432 && ip <= 2147483647) || // 127.0.0.0/8 (Loopback)
+    (ip >= 2851995648 && ip <= 2852061183) || // 169.254.0.0/16 (Link-local)
+    (ip >= 2886729728 && ip <= 2887778303) || // 172.16.0.0/12 (Private B)
+    (ip >= 3232235520 && ip <= 3232301055) // 192.168.0.0/16 (Private C)
+  );
+}
+
 export function assertSafeEndpoint(raw: string, env?: Env): string {
   let url: URL;
   try {
@@ -3687,10 +3796,19 @@ export function assertSafeEndpoint(raw: string, env?: Env): string {
     if (host === "localhost" || host.endsWith(".internal") || host.endsWith(".local")) {
       throw new Error("Endpoint host not allowed.");
     }
-    // Block IPv4 private/loopback/link-local ranges
-    if (/^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)) {
-      throw new Error("Endpoint host not allowed.");
+
+    // Block IPv4 private/loopback/link-local/local-system ranges (handles alternative notations)
+    const parsedIpv4 = parseIpv4ToNumber(host);
+    if (parsedIpv4 !== null) {
+      if (isUnsafeIpv4(parsedIpv4)) {
+        throw new Error("Endpoint host not allowed.");
+      }
+    } else {
+      if (/^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)) {
+        throw new Error("Endpoint host not allowed.");
+      }
     }
+
     // Block IPv6 loopback/unique-local/link-local ranges
     if (host.startsWith("[")) {
       const v6 = host.slice(1, -1).toLowerCase();
@@ -3729,8 +3847,15 @@ export function assertSafeEndpoint(raw: string, env?: Env): string {
       }
 
       if (extractedIpv4) {
-        if (/^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(extractedIpv4)) {
-          throw new Error("Endpoint host not allowed.");
+        const parsedExtracted = parseIpv4ToNumber(extractedIpv4);
+        if (parsedExtracted !== null) {
+          if (isUnsafeIpv4(parsedExtracted)) {
+            throw new Error("Endpoint host not allowed.");
+          }
+        } else {
+          if (/^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(extractedIpv4)) {
+            throw new Error("Endpoint host not allowed.");
+          }
         }
       }
     }

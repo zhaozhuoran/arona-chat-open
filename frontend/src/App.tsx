@@ -58,6 +58,7 @@ const IS_CLERK_AVAILABLE = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
 
 function App() {
   const [bootComplete, setBootComplete] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.matchMedia("(min-width: 1080px)").matches);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sessionInfoOpen, setSessionInfoOpen] = useState(false);
@@ -312,6 +313,24 @@ function App() {
   useEffect(() => {
     useStore.setState({ clerkGetToken: getToken ?? null });
   }, [getToken]);
+
+  useEffect(() => {
+    if (authReady) {
+      setLoadError(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (!authReady) {
+        if (IS_CLERK_AVAILABLE && !clerkIsLoaded) {
+          setLoadError("Authentication Service (Clerk) is taking too long to load. This could be due to network connectivity issues or ad-blockers blocking Clerk CDN.");
+        } else {
+          setLoadError("SCHALE Terminal initialization is taking longer than expected. Please check your network connection or try refreshing the page.");
+        }
+      }
+    }, 12000); // 12 seconds timeout
+
+    return () => clearTimeout(timer);
+  }, [authReady, clerkIsLoaded]);
 
   useEffect(() => {
     const sessionList = sessionListRef.current;
@@ -674,6 +693,47 @@ function App() {
   }, []);
 
   if (!bootComplete || !authReady) {
+    if (loadError) {
+      return (
+        <div className="ba-app is-static-bg">
+          <div className="ba-stage-bg" />
+          <div className="ba-stage-overlay" />
+          <div className="ba-auth-screen z-[50]" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: "100%", height: "100%" }}>
+            <div className="ba-auth-card" style={{ maxWidth: "450px", padding: "2rem", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
+              <img src="/ba/arona-logo.jpg" alt="Arona" className="ba-auth-avatar" style={{ marginBottom: "1.5rem" }} />
+              <h1 style={{ color: "#ef4444", fontSize: "1.5rem", fontWeight: "bold", marginBottom: "1rem" }}>Initialization Timeout</h1>
+              <p className="ba-auth-denied-message" style={{ fontSize: "0.9rem", lineHeight: "1.5", marginBottom: "1.5rem" }}>
+                {loadError}
+              </p>
+              <div style={{ display: "flex", gap: "1rem" }}>
+                <button
+                  type="button"
+                  className="ba-auth-button primary"
+                  onClick={() => window.location.reload()}
+                >
+                  <span>Refresh Page</span>
+                </button>
+                {isPreviewAvailable() && (
+                  <button
+                    type="button"
+                    className="ba-auth-button"
+                    style={{ backgroundColor: "rgba(0,0,0,0.05)", border: "1px solid rgba(0,0,0,0.1)", color: "#333" }}
+                    onClick={() => {
+                      useStore.setState({ authReady: true, authenticated: true, previewMode: true });
+                      sessionStorage.setItem("arona-chat.preview-mode", "1");
+                      window.location.reload();
+                    }}
+                  >
+                    <span>Preview Mode</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="ba-app is-static-bg">
         <div className="ba-stage-bg" />

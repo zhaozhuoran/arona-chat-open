@@ -26,6 +26,7 @@ type ToastType = "success" | "error" | "info";
 export interface AdminUser {
   user_id: string;
   username: string;
+  email?: string | null;
   is_admin: boolean;
   can_manage_ai: boolean;
   can_view_all_users: boolean;

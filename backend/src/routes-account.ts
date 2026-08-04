@@ -1039,8 +1039,8 @@ app.get("/api/sessions/:id/messages", async (c) => {
 
     const db = c.env.D1_DB;
     const { results } = await db
-      .prepare("SELECT user_id, username, is_admin, can_manage_ai, can_view_all_users, total_requests, total_cost_usd, total_self_added_requests, total_self_added_cost_usd, updated_at FROM profiles ORDER BY is_admin DESC, username ASC")
-      .all<{ user_id: string; username: string; is_admin: number; can_manage_ai: number; can_view_all_users: number; total_requests: number; total_cost_usd: number; total_self_added_requests: number; total_self_added_cost_usd: number; updated_at: number }>();
+      .prepare("SELECT user_id, username, email, is_admin, can_manage_ai, can_view_all_users, total_requests, total_cost_usd, total_self_added_requests, total_self_added_cost_usd, updated_at FROM profiles ORDER BY is_admin DESC, username ASC")
+      .all<{ user_id: string; username: string; email: string | null; is_admin: number; can_manage_ai: number; can_view_all_users: number; total_requests: number; total_cost_usd: number; total_self_added_requests: number; total_self_added_cost_usd: number; updated_at: number }>();
 
     const settingsRows = await db
       .prepare("SELECT key, value, user_id FROM app_settings WHERE key IN ('daily_budget_enabled', 'daily_budget_usd')")
@@ -1054,6 +1054,7 @@ app.get("/api/sessions/:id/messages", async (c) => {
       return {
         user_id: row.user_id,
         username: row.username,
+        email: row.email ?? null,
         is_admin: Boolean(row.is_admin),
         can_manage_ai: Boolean(row.can_manage_ai),
         can_view_all_users: Boolean(row.can_view_all_users),

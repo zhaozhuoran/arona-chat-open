@@ -197,3 +197,60 @@ test("assertSafeEndpoint rejects IPv4-mapped and IPv4-compatible IPv6 addresses"
     "https://[::ffff:808:808]/v1"
   );
 });
+
+test("assertSafeEndpoint blocks alternative IPv4 representations (SSRF bypass attempt)", () => {
+  // Decimal integer representations of loopback / private / local system
+  assert.throws(() => {
+    assertSafeEndpoint("https://2130706433/v1"); // 127.0.0.1
+  }, /Endpoint host not allowed./);
+
+  assert.throws(() => {
+    assertSafeEndpoint("https://167772161/v1"); // 10.0.0.1
+  }, /Endpoint host not allowed./);
+
+  assert.throws(() => {
+    assertSafeEndpoint("https://0/v1"); // 0.0.0.0
+  }, /Endpoint host not allowed./);
+
+  // Hexadecimal representations of loopback / private
+  assert.throws(() => {
+    assertSafeEndpoint("https://0x7f000001/v1"); // 127.0.0.1
+  }, /Endpoint host not allowed./);
+
+  assert.throws(() => {
+    assertSafeEndpoint("https://0x0a000001/v1"); // 10.0.0.1
+  }, /Endpoint host not allowed./);
+
+  // Octal representations of loopback / private
+  assert.throws(() => {
+    assertSafeEndpoint("https://0177.0.0.1/v1"); // 127.0.0.1
+  }, /Endpoint host not allowed./);
+
+  assert.throws(() => {
+    assertSafeEndpoint("https://012.0.0.1/v1"); // 10.0.0.1
+  }, /Endpoint host not allowed./);
+
+  // Mixed/short-form representations of loopback / private
+  assert.throws(() => {
+    assertSafeEndpoint("https://127.1/v1"); // 127.0.0.1
+  }, /Endpoint host not allowed./);
+
+  assert.throws(() => {
+    assertSafeEndpoint("https://10.1/v1"); // 10.0.0.1
+  }, /Endpoint host not allowed./);
+
+  assert.throws(() => {
+    assertSafeEndpoint("https://172.16.1/v1"); // 172.16.0.1
+  }, /Endpoint host not allowed./);
+
+  // Legitimate domains with hex-like chars are allowed
+  assert.strictEqual(
+    assertSafeEndpoint("https://cafe.de/v1"),
+    "https://cafe.de/v1"
+  );
+
+  assert.strictEqual(
+    assertSafeEndpoint("https://google.com/v1"),
+    "https://google.com/v1"
+  );
+});

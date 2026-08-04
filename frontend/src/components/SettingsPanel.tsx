@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { SYSTEM_PROMPT_TIMEZONE_OPTIONS, type AiProvider, type AiModel, type ChatGenerationSettings, type LogLevel, type ModelOption, type ReasoningEffort, type ServiceTier, type UsageSummary, type UserProfile, type Workspace, type UserLimitsStatus } from "@arona-chat/shared";
 import type { AdminUser } from "../store/useStore";
@@ -149,56 +149,6 @@ export const SettingsPanel = ({
   onLogout,
 }: SettingsPanelProps) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
-
-  const lastRequestRef = useRef<Record<string, {
-    payload: string;
-    timestamp: number;
-    pending: boolean;
-    failed: boolean;
-  }>>({});
-
-  const handleSaveWithDeduplication = async (
-    key: string,
-    currentPayload: any,
-    saveFn: () => Promise<void>
-  ) => {
-    const now = Date.now();
-    const lastRequest = lastRequestRef.current[key];
-    const payloadStr = JSON.stringify(currentPayload);
-
-    if (lastRequest) {
-      const isPayloadSame = lastRequest.payload === payloadStr;
-      const elapsed = now - lastRequest.timestamp;
-      const isPending = lastRequest.pending;
-      const isFailed = lastRequest.failed;
-
-      if (isPayloadSame && isPending && elapsed < 5000 && !isFailed) {
-        console.warn(`Duplicate click for ${key} ignored.`);
-        return;
-      }
-    }
-
-    lastRequestRef.current[key] = {
-      payload: payloadStr,
-      timestamp: now,
-      pending: true,
-      failed: false
-    };
-
-    try {
-      await saveFn();
-      if (lastRequestRef.current[key]) {
-        lastRequestRef.current[key].pending = false;
-        lastRequestRef.current[key].failed = false;
-      }
-    } catch (error) {
-      if (lastRequestRef.current[key]) {
-        lastRequestRef.current[key].pending = false;
-        lastRequestRef.current[key].failed = true;
-      }
-      throw error;
-    }
-  };
 
   const [username, setUsername] = useState(profile?.username ?? "");
   const [dynamicBackground, setDynamicBackground] = useState(profile?.dynamic_background ?? true);
@@ -476,12 +426,35 @@ export const SettingsPanel = ({
 
               <label className="ba-settings-field">
                 <span>Username</span>
-                <input value={username} onChange={(event) => setUsername(event.target.value)} maxLength={40} />
+                <input
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  onBlur={() => {
+                    const trimmed = username.trim();
+                    setUsername(trimmed);
+                    if (trimmed !== (profile?.username ?? "")) {
+                      void onSaveProfile({ username: trimmed });
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  maxLength={40}
+                />
               </label>
 
               <label className="ba-settings-field">
                 <span>Keyboard send shortcut</span>
-                <select value={sendShortcut} onChange={(event) => setSendShortcut(event.target.value as "ctrl_enter" | "enter")}>
+                <select
+                  value={sendShortcut}
+                  onChange={(event) => {
+                    const val = event.target.value as "ctrl_enter" | "enter";
+                    setSendShortcut(val);
+                    void onSaveProfile({ send_shortcut: val });
+                  }}
+                >
                   <option value="ctrl_enter">Ctrl/⌘ + Enter to send</option>
                   <option value="enter">Enter to send</option>
                 </select>
@@ -491,35 +464,27 @@ export const SettingsPanel = ({
                 <input
                   type="checkbox"
                   checked={conversationLibraryEnabled}
-                  onChange={(event) => setConversationLibraryEnabled(event.target.checked)}
+                  onChange={(event) => {
+                    const val = event.target.checked;
+                    setConversationLibraryEnabled(val);
+                    void onSaveProfile({ conversation_library_enabled: val });
+                  }}
                 />
                 <span>Enable Library in conversation</span>
               </label>
-
-              <button
-                type="button"
-                className="ba-settings-action"
-                disabled={loading}
-                onClick={() =>
-                  void handleSaveWithDeduplication("profile", {
-                    username: username.trim(),
-                    send_shortcut: sendShortcut,
-                    conversation_library_enabled: conversationLibraryEnabled,
-                  }, () => onSaveProfile({
-                    username: username.trim(),
-                    send_shortcut: sendShortcut,
-                    conversation_library_enabled: conversationLibraryEnabled,
-                  }))
-                }
-              >
-                Save Profile
-              </button>
 
               <hr className="ba-settings-divider" />
 
               <label className="ba-settings-field">
                 <span>System Prompt Timezone</span>
-                <select value={timezoneOption} onChange={(event) => setTimezoneOption(event.target.value)}>
+                <select
+                  value={timezoneOption}
+                  onChange={(event) => {
+                    const val = event.target.value;
+                    setTimezoneOption(val);
+                    void onSetSystemPromptTimezone(val);
+                  }}
+                >
                   {SYSTEM_PROMPT_TIMEZONE_OPTIONS.map((item) => (
                     <option key={item.value} value={item.value}>
                       {item.label}
@@ -528,34 +493,20 @@ export const SettingsPanel = ({
                 </select>
               </label>
 
-              <button
-                type="button"
-                className="ba-settings-action"
-                disabled={loading}
-                onClick={() => void handleSaveWithDeduplication("timezone", { timezoneOption }, () => onSetSystemPromptTimezone(timezoneOption))}
-              >
-                Save Timezone
-              </button>
-
               <hr className="ba-settings-divider" />
 
               <label className="ba-toggle-field">
                 <input
                   type="checkbox"
                   checked={showArchivedOption}
-                  onChange={(event) => setShowArchivedOption(event.target.checked)}
+                  onChange={(event) => {
+                    const val = event.target.checked;
+                    setShowArchivedOption(val);
+                    void onSetShowArchivedSessions(val);
+                  }}
                 />
                 <span>Show archived conversations</span>
               </label>
-
-              <button
-                type="button"
-                className="ba-settings-action"
-                disabled={loading}
-                onClick={() => void handleSaveWithDeduplication("showArchived", { showArchivedOption }, () => onSetShowArchivedSessions(showArchivedOption))}
-              >
-                Save Conversation View
-              </button>
 
               <hr className="ba-settings-divider" />
 
@@ -676,7 +627,9 @@ export const SettingsPanel = ({
                         <tr key={u.user_id} className={u.is_admin ? "font-semibold" : ""}>
                           <td>
                             <div>{u.username}</div>
-                            <div className="text-[0.7rem] text-[#888]">{u.is_admin ? "Admin (superuser)" : u.user_id}</div>
+                            <div className="text-[0.7rem] text-[#888]">
+                              {u.is_admin ? "Admin (superuser)" : (u.email || u.user_id)}
+                            </div>
                           </td>
                           <td>
                             <input
@@ -1015,7 +968,14 @@ export const SettingsPanel = ({
 
               <label className="ba-settings-field">
                 <span>Model</span>
-                <select value={model} onChange={(event) => setModel(event.target.value)}>
+                <select
+                  value={model}
+                  onChange={(event) => {
+                    const val = event.target.value;
+                    setModel(val);
+                    void onSetModel(val);
+                  }}
+                >
                   {sortedModels.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name}
@@ -1024,13 +984,16 @@ export const SettingsPanel = ({
                 </select>
               </label>
 
-              <button type="button" className="ba-settings-action" onClick={() => void handleSaveWithDeduplication("model", { model }, () => onSetModel(model))} disabled={loading}>
-                Save Model
-              </button>
-
               <label className="ba-settings-field">
                 <span>Title Model</span>
-                <select value={titleModelOption} onChange={(event) => setTitleModelOption(event.target.value)}>
+                <select
+                  value={titleModelOption}
+                  onChange={(event) => {
+                    const val = event.target.value;
+                    setTitleModelOption(val);
+                    void onSetTitleModel(val);
+                  }}
+                >
                   {titleModelOptions.map((item) => (
                     <option key={`title-${item.id}`} value={item.id}>
                       {item.name}
@@ -1039,20 +1002,18 @@ export const SettingsPanel = ({
                 </select>
               </label>
 
-              <button
-                type="button"
-                className="ba-settings-action"
-                onClick={() => void handleSaveWithDeduplication("titleModel", { titleModelOption }, () => onSetTitleModel(titleModelOption))}
-                disabled={loading}
-              >
-                Save Title Model
-              </button>
-
               <hr className="ba-settings-divider" />
 
               <label className="ba-settings-field">
                 <span>Service Tier</span>
-                <select value={serviceTier} onChange={(event) => setServiceTier(event.target.value as ServiceTier)}>
+                <select
+                  value={serviceTier}
+                  onChange={(event) => {
+                    const val = event.target.value as ServiceTier;
+                    setServiceTier(val);
+                    void onSaveChatSettings({ service_tier: val });
+                  }}
+                >
                   <option value="default">default (1.0x)</option>
                   <option value="flex">flex (0.5x)</option>
                   <option value="priority">priority (2.5x)</option>
@@ -1062,7 +1023,14 @@ export const SettingsPanel = ({
 
               <label className="ba-settings-field">
                 <span>Reasoning Effort</span>
-                <select value={reasoningEffort} onChange={(event) => setReasoningEffort(event.target.value as ReasoningEffort)}>
+                <select
+                  value={reasoningEffort}
+                  onChange={(event) => {
+                    const val = event.target.value as ReasoningEffort;
+                    setReasoningEffort(val);
+                    void onSaveChatSettings({ reasoning_effort: val });
+                  }}
+                >
                   <option value="default">default (No Field)</option>
                   <option value="minimal">minimal</option>
                   <option value="low">low</option>
@@ -1080,6 +1048,17 @@ export const SettingsPanel = ({
                   max={64000}
                   value={maxOutputTokens}
                   onChange={(event) => setMaxOutputTokens(event.target.value)}
+                  onBlur={() => {
+                    const val = Number(maxOutputTokens);
+                    if (Number.isFinite(val) && val > 0 && val !== chatSettings.max_output_tokens) {
+                      void onSaveChatSettings({ max_output_tokens: val });
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.currentTarget.blur();
+                    }
+                  }}
                 />
               </label>
 
@@ -1088,7 +1067,11 @@ export const SettingsPanel = ({
                   type="checkbox"
                   checked={dailyBudgetEnabled}
                   disabled={!isAdmin}
-                  onChange={(event) => setDailyBudgetEnabled(event.target.checked)}
+                  onChange={(event) => {
+                    const val = event.target.checked;
+                    setDailyBudgetEnabled(val);
+                    void onSaveChatSettings({ daily_budget_enabled: val });
+                  }}
                 />
                 <span>Enable Daily Budget Control (Admins Only)</span>
               </label>
@@ -1102,6 +1085,17 @@ export const SettingsPanel = ({
                   value={dailyBudgetUsd}
                   disabled={!dailyBudgetEnabled}
                   onChange={(event) => setDailyBudgetUsd(event.target.value)}
+                  onBlur={() => {
+                    const val = Number(dailyBudgetUsd);
+                    if (Number.isFinite(val) && val >= 0.01 && val !== chatSettings.daily_budget_usd) {
+                      void onSaveChatSettings({ daily_budget_usd: val });
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.currentTarget.blur();
+                    }
+                  }}
                 />
               </label>
               <label className="ba-settings-field">
@@ -1114,6 +1108,20 @@ export const SettingsPanel = ({
                   placeholder="Disabled"
                   disabled={!dailyBudgetEnabled}
                   onChange={(event) => setTemporaryDailyBudgetUsd(event.target.value)}
+                  onBlur={() => {
+                    const trimmed = temporaryDailyBudgetUsd.trim();
+                    const val = trimmed ? Number(trimmed) : null;
+                    if (val === null || (Number.isFinite(val) && val >= 0.01)) {
+                      if (val !== chatSettings.temporary_daily_budget_usd) {
+                        void onSaveChatSettings({ temporary_daily_budget_usd: val });
+                      }
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.currentTarget.blur();
+                    }
+                  }}
                 />
                 <small>Optional. Overrides Daily Budget for today only and clears after the next UTC day starts.</small>
               </label>
@@ -1122,7 +1130,11 @@ export const SettingsPanel = ({
                 <input
                   type="checkbox"
                   checked={webSearchEnabled}
-                  onChange={(event) => setWebSearchEnabled(event.target.checked)}
+                  onChange={(event) => {
+                    const val = event.target.checked;
+                    setWebSearchEnabled(val);
+                    void onSaveChatSettings({ web_search_enabled: val });
+                  }}
                 />
                 <span>Enable Web Search</span>
               </label>
@@ -1136,51 +1148,36 @@ export const SettingsPanel = ({
                   value={webSearchMaxResults}
                   onChange={(event) => setWebSearchMaxResults(event.target.value)}
                   disabled={!webSearchEnabled}
+                  onBlur={() => {
+                    const val = Number(webSearchMaxResults);
+                    if (Number.isFinite(val) && val >= 1 && val <= 25 && val !== chatSettings.web_search_max_results) {
+                      void onSaveChatSettings({ web_search_max_results: val });
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.currentTarget.blur();
+                    }
+                  }}
                 />
               </label>
-
-              <button
-                type="button"
-                className="ba-settings-action"
-                disabled={loading}
-                onClick={() =>
-                  void handleSaveWithDeduplication("chatSettings", {
-                    service_tier: serviceTier,
-                    reasoning_effort: reasoningEffort,
-                    max_output_tokens: Number(maxOutputTokens),
-                    daily_budget_usd: Number(dailyBudgetUsd),
-                    temporary_daily_budget_usd: temporaryDailyBudgetUsd.trim() ? Number(temporaryDailyBudgetUsd) : null,
-                    web_search_enabled: webSearchEnabled,
-                    web_search_max_results: Number(webSearchMaxResults),
-                    daily_budget_enabled: dailyBudgetEnabled,
-                  }, () => onSaveChatSettings({
-                    service_tier: serviceTier,
-                    reasoning_effort: reasoningEffort,
-                    max_output_tokens: Number(maxOutputTokens),
-                    daily_budget_usd: Number(dailyBudgetUsd),
-                    temporary_daily_budget_usd: temporaryDailyBudgetUsd.trim() ? Number(temporaryDailyBudgetUsd) : null,
-                    web_search_enabled: webSearchEnabled,
-                    web_search_max_results: Number(webSearchMaxResults),
-                    daily_budget_enabled: dailyBudgetEnabled,
-                  }))
-                }
-              >
-                Save Generation Settings
-              </button>
 
               <hr className="ba-settings-divider" />
 
               <label className="ba-settings-field">
                 <span>Backend Log Level</span>
-                <select value={logLevelOption} onChange={(event) => setLogLevelOption(event.target.value as LogLevel)}>
+                <select
+                  value={logLevelOption}
+                  onChange={(event) => {
+                    const val = event.target.value as LogLevel;
+                    setLogLevelOption(val);
+                    void onSetLogLevel(val);
+                  }}
+                >
                   <option value="INFO">INFO</option>
                   <option value="TRACE">TRACE</option>
                 </select>
               </label>
-
-              <button type="button" className="ba-settings-action" disabled={loading} onClick={() => void handleSaveWithDeduplication("logLevel", { logLevelOption }, () => onSetLogLevel(logLevelOption))}>
-                Save Log Level
-              </button>
             </article>
           )}
 
@@ -1345,7 +1342,11 @@ export const SettingsPanel = ({
                   <span>API Request Attachment Mode</span>
                   <select
                     value={attachmentMode}
-                    onChange={(event) => setAttachmentMode(event.target.value as "url" | "base64")}
+                    onChange={(event) => {
+                      const val = event.target.value as "url" | "base64";
+                      setAttachmentMode(val);
+                      void onSaveChatSettings({ attachment_mode: val });
+                    }}
                   >
                     <option value="url">Standard URL Mode (Default)</option>
                     <option value="base64">Direct Base64 Mode</option>
@@ -1354,18 +1355,6 @@ export const SettingsPanel = ({
                     Choose whether file attachments are directly Base64-encoded into the request payload or passed as standard downloadable URLs.
                   </small>
                 </label>
-                <button
-                  type="button"
-                  className="ba-settings-action"
-                  disabled={loading}
-                  onClick={() =>
-                    void handleSaveWithDeduplication("attachmentModeSetting", { attachment_mode: attachmentMode }, () => onSaveChatSettings({
-                      attachment_mode: attachmentMode,
-                    }))
-                  }
-                >
-                  Save Attachment Mode
-                </button>
               </div>
 
               <hr className="ba-settings-divider" />
@@ -1376,25 +1365,17 @@ export const SettingsPanel = ({
                   <input
                     type="checkbox"
                     checked={disableMaxOutputTokens}
-                    onChange={(event) => setDisableMaxOutputTokens(event.target.checked)}
+                    onChange={(event) => {
+                      const val = event.target.checked;
+                      setDisableMaxOutputTokens(val);
+                      void onSaveChatSettings({ disable_max_output_tokens: val });
+                    }}
                   />
                   <span>Disable Max Output Tokens Parameter</span>
                 </label>
                 <small className="text-[var(--arona-text-s)] block mt-1">
                   Enabling this prevents sending the <code>max_tokens</code> or <code>max_output_tokens</code> parameters to the upstream provider, resolving errors with models or gateways that enforce strict constraints.
                 </small>
-                <button
-                  type="button"
-                  className="ba-settings-action mt-3"
-                  disabled={loading}
-                  onClick={() =>
-                    void handleSaveWithDeduplication("disableMaxOutputTokensSetting", { disable_max_output_tokens: disableMaxOutputTokens }, () => onSaveChatSettings({
-                      disable_max_output_tokens: disableMaxOutputTokens,
-                    }))
-                  }
-                >
-                  Save Max Tokens Control
-                </button>
               </div>
 
               <hr className="ba-settings-divider" />
