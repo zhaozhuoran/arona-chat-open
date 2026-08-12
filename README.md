@@ -58,12 +58,6 @@ cp backend/.dev.vars.example backend/.dev.vars
 npm run dev
 ```
 
-## 🌟 Project Origin
-
-This project was developed as part of HackClub Stardance.
-
-View the original project page: [https://stardance.hackclub.com/projects/17862](https://stardance.hackclub.com/projects/17862)
-
 ## 📁 Repository Status
 
 This is a **public mirror** of the Arona Chat project.
