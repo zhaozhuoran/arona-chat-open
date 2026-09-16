@@ -493,6 +493,7 @@ export class ChatSessionDurableObject {
         user_message_id: payload.user_message_id,
         new_session: payload.new_session,
         is_admin: payload.is_admin,
+        request_id: payload.request_id || null,
       },
       cursor: null,
       created_at: now,
@@ -514,11 +515,13 @@ export class ChatSessionDurableObject {
       await upsertChatStreamJobRecord(this.env.D1_DB, job);
     } catch (error) {
       logError("chat.do.recovery_state_persist_failed", {
+        request_id: payload.request_id || null,
         session_id: payload.session_id,
         job_id: jobId,
       }, error);
     }
     logInfo("chat.do.submit_accepted", {
+      request_id: payload.request_id || null,
       session_id: payload.session_id,
       job_id: jobId,
       user_id: payload.user_id,
@@ -716,6 +719,7 @@ export class ChatSessionDurableObject {
             await upsertChatStreamJobRecord(this.env.D1_DB, target);
           } catch (error) {
             logError("chat.do.recovery_state_persist_failed", {
+              request_id: target.payload.request_id || null,
               session_id: target.payload.session_id,
               job_id: target.job_id,
               state: target.state,
@@ -723,6 +727,7 @@ export class ChatSessionDurableObject {
           }
           await this.appendEvent(target.job_id, "job_started", { state: "running" });
           logInfo("chat.do.job_started", {
+            request_id: target.payload.request_id || null,
             session_id: target.payload.session_id,
             job_id: target.job_id,
             user_id: target.payload.user_id,
@@ -731,6 +736,7 @@ export class ChatSessionDurableObject {
           this.jobs.set(target.job_id, target);
           await this.persistJob(target);
           logInfo("chat.do.job_resuming", {
+            request_id: target.payload.request_id || null,
             session_id: target.payload.session_id,
             job_id: target.job_id,
           });
@@ -750,6 +756,7 @@ export class ChatSessionDurableObject {
             await upsertChatStreamJobRecord(this.env.D1_DB, target);
           } catch (error) {
             logError("chat.do.recovery_state_persist_failed", {
+              request_id: target.payload.request_id || null,
               session_id: target.payload.session_id,
               job_id: target.job_id,
               state: target.state,
@@ -757,6 +764,7 @@ export class ChatSessionDurableObject {
           }
           await this.appendEvent(target.job_id, "job_completed", { state: "completed" });
           logInfo("chat.do.job_completed", {
+            request_id: target.payload.request_id || null,
             session_id: target.payload.session_id,
             job_id: target.job_id,
           });
@@ -783,6 +791,7 @@ export class ChatSessionDurableObject {
             await upsertChatStreamJobRecord(this.env.D1_DB, target);
           } catch (persistError) {
             logError("chat.do.recovery_state_persist_failed", {
+              request_id: target.payload.request_id || null,
               session_id: target.payload.session_id,
               job_id: target.job_id,
               state: target.state,
@@ -798,6 +807,7 @@ export class ChatSessionDurableObject {
           }
           await this.appendEvent(target.job_id, "job_failed", { error: revealedErrorMessage });
           logError("chat.do.job_failed", {
+            request_id: target.payload.request_id || null,
             session_id: target.payload.session_id,
             job_id: target.job_id,
             user_id: target.payload.user_id,
@@ -850,7 +860,8 @@ export class ChatSessionDurableObject {
               item.content,
               item.attachments,
               metaMap,
-              "base64"
+              "base64",
+              payload.chat_settings.text_file_extraction_mode
             ),
           }))
         );
@@ -1128,6 +1139,7 @@ export class ChatSessionDurableObject {
             : false,
           body: currentUpstreamRequestBody,
         });
+        const upstreamStartTime = Date.now();
         try {
           upstream = await fetch(payload.api_endpoint, {
             method: "POST",
@@ -1145,6 +1157,15 @@ export class ChatSessionDurableObject {
         } finally {
           clearTimeout(upstreamTimeout);
         }
+        const upstreamLatencyMs = Date.now() - upstreamStartTime;
+        logInfo("chat.do.upstream_latency", {
+          request_id: payload.request_id || null,
+          session_id: payload.session_id,
+          job_id: job.job_id,
+          model: payload.selected_model,
+          latency_ms: upstreamLatencyMs,
+        });
+
         if (!upstream.ok) {
           const reason = await upstream.text();
           const upstreamReason = formatTraceText(reason.trim()) || "Upstream request failed.";

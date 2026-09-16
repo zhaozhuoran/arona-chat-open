@@ -200,7 +200,7 @@ type UserMessageRowProps = {
 
 const UserMessageRow = memo(({ message, username, avatarUrl, theme }: UserMessageRowProps) => {
   const messageTime = formatMessageTime(message.created_at);
-  const isEthereal = theme === "ethereal-light";
+  const isEthereal = theme?.startsWith("ethereal-");
   const userFallback = "/ba/shitim/Tran_Shitim_Icon.png";
 
   if (isEthereal) {
@@ -245,7 +245,7 @@ const UserMessageRow = memo(({ message, username, avatarUrl, theme }: UserMessag
           <LazyMarkdown content={normalizeMessageMarkdown(message.content)} />
         </div>
       </div>
-      <img src={avatarUrl || userFallback} alt="Sensei" className="ba-message-avatar" />
+      <img src={avatarUrl || userFallback} alt={username && username !== "You" ? username : "Sensei"} className="ba-message-avatar" />
     </div>
   );
 });
@@ -283,7 +283,7 @@ const AssistantMessageRow = memo(
     const message = group.messages[selectedIndex];
     const messageTime = formatMessageTime(message.created_at);
     const canSwitchVersion = group.messages.length > 1;
-    const isEthereal = theme === "ethereal-light";
+    const isEthereal = theme?.startsWith("ethereal-");
     const profile = useStore((state) => state.profile);
     const aronaBubbleStyle = profile?.arona_bubble_style || "none";
 
@@ -652,12 +652,15 @@ const DripMarkdown = memo(({ content }: { content: string }) => {
   return <LazyMarkdown content={normalizeMessageMarkdown(displayText)} />;
 });
 
-const useBufferedChunks = (content: string, isActive: boolean, minThreshold = 400) => {
+const useBufferedChunks = (content: string, isActive: boolean, minThreshold = 60) => {
   const [chunks, setChunks] = useState<string[]>([]);
   const bufferRef = useRef<string>("");
   const fullContentRef = useRef<string>("");
   const isActiveRef = useRef(isActive);
   const timerRef = useRef<number | null>(null);
+
+  // Maintain sliding window of character arrival speeds over last 2 seconds
+  const speedHistoryRef = useRef<{ timestamp: number; length: number }[]>([]);
 
   useEffect(() => {
     isActiveRef.current = isActive;
@@ -668,17 +671,38 @@ const useBufferedChunks = (content: string, isActive: boolean, minThreshold = 40
       setChunks([]);
       bufferRef.current = "";
       fullContentRef.current = "";
+      speedHistoryRef.current = [];
       return;
     }
     if (content.length < fullContentRef.current.length || !content.startsWith(fullContentRef.current.slice(0, 10))) {
       setChunks([]);
       bufferRef.current = content;
+      speedHistoryRef.current = [];
     } else {
       const added = content.slice(fullContentRef.current.length);
-      if (added) bufferRef.current += added;
+      if (added) {
+        bufferRef.current += added;
+        const now = Date.now();
+        speedHistoryRef.current.push({ timestamp: now, length: added.length });
+        // Prune entries older than 2 seconds
+        speedHistoryRef.current = speedHistoryRef.current.filter(entry => now - entry.timestamp <= 2000);
+      }
     }
     fullContentRef.current = content;
   }, [content]);
+
+  const getUpstreamSpeed = useCallback(() => {
+    const history = speedHistoryRef.current;
+    if (history.length < 2) return 0;
+    const now = Date.now();
+    const windowHistory = history.filter(entry => now - entry.timestamp <= 2000);
+    if (windowHistory.length < 2) return 0;
+    const totalLength = windowHistory.reduce((sum, entry) => sum + entry.length, 0);
+    const first = windowHistory[0].timestamp;
+    const last = windowHistory[windowHistory.length - 1].timestamp;
+    const durationSec = Math.max(0.5, (last - first) / 1000);
+    return totalLength / durationSec;
+  }, []);
 
   const tick = useCallback(() => {
     if (bufferRef.current.length === 0) {
@@ -690,18 +714,44 @@ const useBufferedChunks = (content: string, isActive: boolean, minThreshold = 40
       return;
     }
 
-    const bLen = bufferRef.current.length;
-    let chunkSize = 150; // Batch size (~50 tokens)
-    let delay = 150;
+    // If stream is completed, instantly flush the remaining buffer
+    if (!isActiveRef.current) {
+      const nextChunk = bufferRef.current;
+      bufferRef.current = "";
+      setChunks(prev => [...prev, nextChunk]);
+      timerRef.current = null;
+      return;
+    }
 
-    if (bLen > 1000) { chunkSize = 400; delay = 80; }
-    else if (bLen > 400) { chunkSize = 200; delay = 120; }
+    const bLen = bufferRef.current.length;
+    const speed = getUpstreamSpeed();
+    const estSpeed = Math.max(30, speed); // Ensure fallback speed
+
+    // Adjust reveal delay & chunk size dynamically based on buffer size and speed
+    // 100 is our target buffer size
+    const ratio = bLen / 100;
+    let delay = 80;
+
+    if (bLen > 100) {
+      // Buffer built up: speed up by reducing delay and increasing chunk size
+      delay = Math.max(40, 80 - (bLen - 100) / 5);
+    } else {
+      // Buffer low: slow down by increasing delay and decreasing chunk size
+      delay = Math.min(150, 80 + (100 - bLen) * 0.7);
+    }
+
+    const baseChunk = estSpeed * (delay / 1000);
+    const scalingFactor = Math.pow(ratio, 1.3);
+    // Enforce a small minimum chunk size (e.g. 8 characters) to avoid per-character chunking
+    // and protect rendering/DOM node counts, while preserving adaptive pacing.
+    const calculatedSize = Math.max(8, Math.round(baseChunk * scalingFactor));
+    const chunkSize = Math.min(bLen, calculatedSize);
 
     const nextChunk = bufferRef.current.slice(0, chunkSize);
     bufferRef.current = bufferRef.current.slice(chunkSize);
     setChunks(prev => [...prev, nextChunk]);
     timerRef.current = window.setTimeout(tick, delay);
-  }, []);
+  }, [getUpstreamSpeed]);
 
   useEffect(() => {
     if (isActive && !timerRef.current) {
@@ -798,6 +848,7 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
     pushToast: state.pushToast,
   })));
 
+  const isEthereal = theme?.startsWith("ethereal-");
   const aronaBubbleStyle = profile?.arona_bubble_style || "none";
   const bottomRef = useRef<HTMLDivElement>(null);
   const chatlogRef = useRef<HTMLDivElement>(null);
@@ -1028,7 +1079,7 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
 
   return (
     <div className="relative flex-1 min-h-0 flex flex-col">
-      {theme === "ethereal-light" && (
+      {isEthereal && (
         <>
           <div className="ba-chat-fade-top" />
           <div className="ba-chat-fade-bottom" />
@@ -1042,7 +1093,7 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
         <div className="ba-chatlog-content">
       {visibleMessages.length === 0 && !loadingMessages && (
         <div className="ba-chatlog-empty">
-          {theme === "ethereal-light" && (
+          {isEthereal && (
             <span className="ba-empty-orb" aria-hidden="true">
               <svg viewBox="0 0 40 40">
                 <defs>
@@ -1053,8 +1104,8 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
                     <feDisplacementMap in="SourceGraphic" scale="6" />
                   </filter>
                   <radialGradient id="ethereal-glow-empty">
-                    <stop offset="0%" stopColor="#77DEFF" />
-                    <stop offset="100%" stopColor="#FFF1F8" />
+                    <stop offset="0%" stopColor="var(--arona-orb-start)" />
+                    <stop offset="100%" stopColor="var(--arona-orb-end)" />
                   </radialGradient>
                 </defs>
                 <path
@@ -1066,7 +1117,7 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
               </svg>
             </span>
           )}
-          <p className="ba-chatlog-empty-title">Sensei, welcome back.</p>
+          <p className="ba-chatlog-empty-title">{`${profile?.username?.trim() || "Sensei"}, welcome back.`}</p>
           <p className="ba-chatlog-empty-subtitle">Start a new conversation or pick one from the sidebar.</p>
         </div>
       )}
@@ -1193,11 +1244,11 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
       {hasStreamingAssistant && !activeStreamFailure && (
         <div className="ba-message-row is-assistant">
           <img className="ba-message-avatar" src={ARONA_AVATAR_SRC} alt="Arona" />
-          <div className={`ba-message is-assistant ${theme === "ethereal-light" ? `bubble-style-${aronaBubbleStyle}` : ""}`}>
+          <div className={`ba-message is-assistant ${isEthereal ? `bubble-style-${aronaBubbleStyle}` : ""}`}>
             <div className="ba-message-head">
               <div className="ba-message-label">Arona</div>
             </div>
-            {theme === "ethereal-light" ? (
+            {isEthereal ? (
               (streamingThinkingTopic && !streamingMessage) ? (
                 <div key={topicKey} className="ba-thinking-topic is-streaming">
                   {profile?.ethereal_streaming_style === "buffered" ? (
@@ -1217,7 +1268,7 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
             )}
             {streamingMessage && (
               <div className="ba-markdown is-streaming">
-                {theme === "ethereal-light" ? (
+                {isEthereal ? (
                   profile?.ethereal_streaming_style === "buffered" ? (
                     <BufferedMarkdown content={streamingMessage} isActive={true} />
                   ) : (
@@ -1228,7 +1279,7 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
                 )}
               </div>
             )}
-            {!streamingMessage && !streamingThinkingTopic && theme === "ethereal-light" && (
+            {!streamingMessage && !streamingThinkingTopic && isEthereal && (
                <div className="flex items-center gap-2 mb-2">
                  <span className="ba-thinking-orb" aria-hidden="true">
                    <svg viewBox="0 0 40 40"><defs>
@@ -1239,8 +1290,8 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
                        <feDisplacementMap in="SourceGraphic" scale="6"/>
                      </filter>
                      <radialGradient id="ethereal-glow">
-                       <stop offset="0%" stopColor="#77DEFF"/>
-                       <stop offset="100%" stopColor="#F0F9FF"/>
+                       <stop offset="0%" stopColor="var(--arona-orb-start)"/>
+                       <stop offset="100%" stopColor="var(--arona-orb-end)"/>
                      </radialGradient>
                    </defs>
                      <path transform="translate(0, 4)" filter="url(#ethereal-blob)" fill="url(#ethereal-glow)"
@@ -1259,7 +1310,7 @@ export const ChatSession = ({ onScrollYChange }: ChatSessionProps) => {
           <div ref={bottomRef} className="ba-chatlog-bottom" />
         </div>
       </div>
-      {theme === "ethereal-light" && hasStreamingAssistant && isUserScrolledUp && (
+      {isEthereal && hasStreamingAssistant && isUserScrolledUp && (
         <div className="ba-scroll-to-bottom-wrap">
           <button type="button" className="ba-scroll-to-bottom-btn" onClick={scrollToBottom}>
             <ArrowDown size={16} className="ba-scroll-to-bottom-icon" />

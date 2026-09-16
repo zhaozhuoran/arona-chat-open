@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
+import { API_URL as UNIFIED_API_URL, isPreviewAvailable as UNIFIED_isPreviewAvailable } from "../config";
 import type {
   AiProvider,
   AiModel,
@@ -19,7 +19,25 @@ import type {
   DailyBudgetStatus,
   UserLimitsStatus,
 } from "@arona-chat/shared";
-import { SESSION_TITLE_MAX_LENGTH } from "../constants/session";
+export type {
+  AiProvider,
+  AiModel,
+  ChatGenerationSettings,
+  LogLevel,
+  Message,
+  MessageAttachment,
+  MessageAttachmentType,
+  ModelOption,
+  PasskeyInfo,
+  ReasoningEffort,
+  ServiceTier,
+  Session,
+  UsageSummary,
+  UserProfile,
+  Workspace,
+  DailyBudgetStatus,
+  UserLimitsStatus,
+};
 
 type ToastType = "success" | "error" | "info";
 
@@ -44,13 +62,13 @@ export type ToastItem = {
   message: string;
 };
 
-type AuthMethod = "password" | "passkey" | "preview" | null;
+export type AuthMethod = "password" | "passkey" | "preview" | null;
 
 type ProfileUpdatePayload = {
   username?: string;
   avatar_key?: string | null;
   dynamic_background?: boolean;
-  theme?: "standard" | "ethereal-light";
+  theme?: "standard" | "ethereal-light" | "ethereal-dark";
   arona_bubble_style?: "none" | "border";
   ethereal_streaming_style?: "typewriter" | "buffered";
   send_shortcut?: "ctrl_enter" | "enter";
@@ -72,7 +90,7 @@ export type AttachmentLibraryItem = MessageAttachment & {
 
 export type LibraryItem = AttachmentLibraryItem;
 
-interface Store {
+export interface Store {
   authReady: boolean;
   authLoading: boolean;
   authenticated: boolean;
@@ -214,20 +232,20 @@ interface Store {
 
 type RequestInitWithAuth = RequestInit & { token?: string | null };
 
-const API_URL = (typeof import.meta !== "undefined" && import.meta.env ? import.meta.env.VITE_API_URL : undefined) || "http://localhost:8787";
-const TOKEN_STORAGE_KEY = "arona-chat.auth-token";
-const PREVIEW_MODE_STORAGE_KEY = "arona-chat.preview-mode";
+export const API_URL = UNIFIED_API_URL;
+export const TOKEN_STORAGE_KEY = "arona-chat.auth-token";
+export const PREVIEW_MODE_STORAGE_KEY = "arona-chat.preview-mode";
 /** Delay per chunk when simulating streaming in preview mode, chosen to feel like a real stream. */
-const PREVIEW_STREAM_CHUNK_DELAY_MS = 18;
-const SDR_COMPATIBLE_IMAGE_TYPES = ["image/png", "image/webp", "image/jpeg"] as const;
-const DEFAULT_MODEL = "openrouter/auto";
-const ZERO_SESSION_USAGE = { total_tokens: 0, total_cost_usd: 0 };
+export const PREVIEW_STREAM_CHUNK_DELAY_MS = 18;
+export const SDR_COMPATIBLE_IMAGE_TYPES = ["image/png", "image/webp", "image/jpeg"] as const;
+export const DEFAULT_MODEL = "openrouter/auto";
+export const ZERO_SESSION_USAGE = { total_tokens: 0, total_cost_usd: 0 };
 export const SERVICE_TIER_MULTIPLIERS: Record<string, number> = {
   flex: 0.5,
   default: 1.0,
   priority: 2.5,
 };
-const DEFAULT_CHAT_SETTINGS: ChatGenerationSettings = {
+export const DEFAULT_CHAT_SETTINGS: ChatGenerationSettings = {
   service_tier: "default",
   reasoning_effort: "default",
   max_output_tokens: 64000,
@@ -239,30 +257,33 @@ const DEFAULT_CHAT_SETTINGS: ChatGenerationSettings = {
   attachment_mode: "url",
   disable_max_output_tokens: false,
   daily_budget_enabled: true,
+  text_file_extraction_mode: "xml",
+  image_compression_enabled: true,
+  image_max_dimension: 2048,
 };
-const DEFAULT_LOG_LEVEL: LogLevel = "INFO";
-const DEFAULT_BACKEND_BUILD_HASH = "unknown";
-const DEFAULT_BACKEND_BUILD_TIME = "";
-const STREAM_INFLIGHT_PREFIX = "arona-chat.stream.inflight.";
-const STREAM_INFLIGHT_MAX_AGE_MS = 10 * 60 * 1000;
-const STREAM_INFLIGHT_PERSIST_MIN_INTERVAL_MS = 500;
-const STREAM_INFLIGHT_PERSIST_MIN_SEQUENCE_DELTA = 24;
-const STREAM_EVENT_CONNECTION_TIMEOUT_MS = 25_000;
-const STREAM_EVENT_STALL_TIMEOUT_MS = 45_000;
-const STREAM_EVENT_POLL_INTERVAL_MS = 1_500;
-const STREAM_EVENT_POLL_MAX_AGE_MS = 120_000;
+export const DEFAULT_LOG_LEVEL: LogLevel = "INFO";
+export const DEFAULT_BACKEND_BUILD_HASH = "unknown";
+export const DEFAULT_BACKEND_BUILD_TIME = "";
+export const STREAM_INFLIGHT_PREFIX = "arona-chat.stream.inflight.";
+export const STREAM_INFLIGHT_MAX_AGE_MS = 10 * 60 * 1000;
+export const STREAM_INFLIGHT_PERSIST_MIN_INTERVAL_MS = 500;
+export const STREAM_INFLIGHT_PERSIST_MIN_SEQUENCE_DELTA = 24;
+export const STREAM_EVENT_CONNECTION_TIMEOUT_MS = 25_000;
+export const STREAM_EVENT_STALL_TIMEOUT_MS = 45_000;
+export const STREAM_EVENT_POLL_INTERVAL_MS = 1_500;
+export const STREAM_EVENT_POLL_MAX_AGE_MS = 120_000;
 
 // ---------------------------------------------------------------------------
 // Preview-mode helpers (frontend-only, no backend calls)
 // ---------------------------------------------------------------------------
 
 /** Returns true when this is a preview build with VITE_PREVIEW_PASSWORD embedded. */
-export const isPreviewAvailable = (): boolean => Boolean(typeof import.meta !== "undefined" && import.meta.env ? import.meta.env.VITE_PREVIEW_PASSWORD?.trim() : undefined);
+export const isPreviewAvailable = UNIFIED_isPreviewAvailable;
 
-const PREVIEW_SESSION_ID_1 = "preview-s1";
-const PREVIEW_SESSION_ID_2 = "preview-s2";
+export const PREVIEW_SESSION_ID_1 = "preview-s1";
+export const PREVIEW_SESSION_ID_2 = "preview-s2";
 
-const PREVIEW_MOCK_PROFILE: UserProfile = {
+export const PREVIEW_MOCK_PROFILE: UserProfile = {
   username: "Preview Sensei",
   avatar_key: null,
   avatar_url: null,
@@ -275,7 +296,7 @@ const PREVIEW_MOCK_PROFILE: UserProfile = {
   updated_at: Date.now(),
 };
 
-const buildPreviewSessions = (): Session[] => {
+export const buildPreviewSessions = (): Session[] => {
   const now = Date.now();
   return [
     { id: PREVIEW_SESSION_ID_1, title: "Welcome to SCHALE Terminal", created_at: now - 3_600_000, archived_at: null, pinned_at: now - 3_600_000 },
@@ -283,7 +304,7 @@ const buildPreviewSessions = (): Session[] => {
   ];
 };
 
-const buildPreviewMessages = (): Record<string, Message[]> => {
+export const buildPreviewMessages = (): Record<string, Message[]> => {
   const now = Date.now();
   return {
     [PREVIEW_SESSION_ID_1]: [
@@ -308,14 +329,14 @@ const buildPreviewMessages = (): Record<string, Message[]> => {
   };
 };
 
-const PREVIEW_MOCK_MODELS: ModelOption[] = [
+export const PREVIEW_MOCK_MODELS: ModelOption[] = [
   { id: "openrouter/auto", model_id: "openrouter/auto", name: "Auto (OpenRouter)", pricing: null },
   { id: "anthropic/claude-3.5-sonnet", model_id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", pricing: { input_usd_per_million: 3, output_usd_per_million: 15 } },
   { id: "openai/gpt-4o", model_id: "openai/gpt-4o", name: "GPT-4o", pricing: { input_usd_per_million: 2.5, output_usd_per_million: 10 } },
   { id: "google/gemini-2.0-flash-001", model_id: "google/gemini-2.0-flash-001", name: "Gemini 2.0 Flash", pricing: { input_usd_per_million: 0.1, output_usd_per_million: 0.4 } },
 ];
 
-const PREVIEW_MOCK_USAGE: UsageSummary = {
+export const PREVIEW_MOCK_USAGE: UsageSummary = {
   total_requests: 12,
   total_prompt_tokens: 8420,
   total_completion_tokens: 4180,
@@ -327,7 +348,7 @@ const PREVIEW_MOCK_USAGE: UsageSummary = {
   ],
 };
 
-const PREVIEW_MOCK_LIMITS: UserLimitsStatus = {
+export const PREVIEW_MOCK_LIMITS: UserLimitsStatus = {
   enabled: true,
   max_daily_req: 50,
   current_daily_req: 12,
@@ -336,16 +357,16 @@ const PREVIEW_MOCK_LIMITS: UserLimitsStatus = {
   max_single_file_mb: 25,
 };
 
-const PREVIEW_RESPONSE_TEXTS = [
+export const PREVIEW_RESPONSE_TEXTS = [
   "This is a **preview environment** — real AI responses are not available here, but you can explore the full interface.\n\nSCHALE Terminal supports Markdown, code blocks, LaTeX math, reasoning traces, and file attachments. Try navigating between sessions in the sidebar, or open Settings to see the available options!",
   "Hello, Sensei! I'm running in **preview mode**, so I can't connect to the real AI backend.\n\nIn a production deployment I would answer your questions, assist with research, writing, coding, and much more. Feel free to keep exploring — all UI components are fully functional in this preview build. 🌸",
   "**Preview build note:** Backend connectivity is disabled in this environment.\n\nYou can still browse example conversations, switch sessions, adjust settings locally, and get a feel for the overall layout and interaction patterns of SCHALE Terminal.",
 ];
 
 /** In-memory map used to persist new preview-session messages across session switches. */
-const previewSessionMessages = new Map<string, Message[]>();
+export const previewSessionMessages = new Map<string, Message[]>();
 
-const normalizeLogLevel = (value: unknown): LogLevel => {
+export const normalizeLogLevel = (value: unknown): LogLevel => {
   if (value === "TRACE") {
     return "TRACE";
   }
@@ -383,7 +404,7 @@ const normalizeServiceTier = (value: unknown): ServiceTier => {
   return "default";
 };
 
-const normalizeChatSettings = (value: Partial<ChatGenerationSettings> | null | undefined): ChatGenerationSettings => {
+export const normalizeChatSettings = (value: Partial<ChatGenerationSettings> | null | undefined): ChatGenerationSettings => {
   const maxOutputTokensRaw = Number(value?.max_output_tokens);
   let maxOutputTokens = Number.isFinite(maxOutputTokensRaw) ? Math.min(64000, Math.max(1, Math.round(maxOutputTokensRaw))) : 64000;
   if (maxOutputTokens >= 1024) {
@@ -406,12 +427,15 @@ const normalizeChatSettings = (value: Partial<ChatGenerationSettings> | null | u
     attachment_mode: value?.attachment_mode === "base64" ? "base64" : "url",
     disable_max_output_tokens: value?.disable_max_output_tokens !== undefined ? Boolean(value.disable_max_output_tokens) : false,
     daily_budget_enabled: value?.daily_budget_enabled !== undefined ? Boolean(value.daily_budget_enabled) : true,
+    text_file_extraction_mode: value?.text_file_extraction_mode === "url" ? "url" : "xml",
+    image_compression_enabled: value?.image_compression_enabled !== undefined ? Boolean(value.image_compression_enabled) : true,
+    image_max_dimension: Number.isFinite(Number(value?.image_max_dimension)) && Number(value?.image_max_dimension) > 0 ? Number(value?.image_max_dimension) : 2048,
   };
 };
 
-const getCurrentUtcDate = (): string => new Date().toISOString().slice(0, 10);
+export const getCurrentUtcDate = (): string => new Date().toISOString().slice(0, 10);
 
-const calcBudgetStatus = (
+export const calcBudgetStatus = (
   usage: UsageSummary | null,
   settings: ChatGenerationSettings,
   models: ModelOption[],
@@ -442,7 +466,7 @@ const calcBudgetStatus = (
   return { date_utc: dateUtc, budget_usd: budget, spent_usd: spent, remaining_usd: remaining, selected_model_output_usd_per_million: outPrice, available_output_tokens: available };
 };
 
-const warnBudget = (store: Store) => {
+export const warnBudget = (store: Store) => {
   const status = calcBudgetStatus(
     store.dailyUsage,
     store.chatSettings,
@@ -455,7 +479,7 @@ const warnBudget = (store: Store) => {
   }
 };
 
-const resolveMaxOutputTokensOverride = (
+export const resolveMaxOutputTokensOverride = (
   settings: ChatGenerationSettings,
   budgetStatus: DailyBudgetStatus,
 ): number => {
@@ -473,7 +497,7 @@ const resolveMaxOutputTokensOverride = (
   return Math.round(resultVal / 1024) * 1024;
 };
 
-const resolveAttachmentType = (mimeType: string): MessageAttachmentType => {
+export const resolveAttachmentType = (mimeType: string): MessageAttachmentType => {
   if (mimeType.startsWith("image/")) {
     return "image";
   }
@@ -486,14 +510,14 @@ const resolveAttachmentType = (mimeType: string): MessageAttachmentType => {
   return "file";
 };
 
-const getErrorMessage = (error: unknown): string => {
+export const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error && error.message) {
     return error.message;
   }
   return "Request failed.";
 };
 
-const parseApiError = async (response: Response): Promise<string> => {
+export const parseApiError = async (response: Response): Promise<string> => {
   try {
     const data = (await response.json()) as { error?: string };
     if (data.error) {
@@ -505,7 +529,7 @@ const parseApiError = async (response: Response): Promise<string> => {
   return response.statusText || `HTTP ${response.status}`;
 };
 
-const requestJson = async <T>(path: string, init: RequestInitWithAuth = {}, retry = true): Promise<T> => {
+export const requestJson = async <T>(path: string, init: RequestInitWithAuth = {}, retry = true): Promise<T> => {
   let currentToken = init.token;
   if (!currentToken) {
     currentToken = await useStore.getState().refreshClerkToken(false);
@@ -535,7 +559,7 @@ const requestJson = async <T>(path: string, init: RequestInitWithAuth = {}, retr
   return (await response.json()) as T;
 };
 
-const cancelUploadSession = async (sessionId: string, token: string | null): Promise<void> => {
+export const cancelUploadSession = async (sessionId: string, token: string | null): Promise<void> => {
   try {
     await fetch(`${API_URL}/api/upload-sessions/${encodeURIComponent(sessionId)}/cancel`, {
       method: "POST",
@@ -546,7 +570,7 @@ const cancelUploadSession = async (sessionId: string, token: string | null): Pro
   }
 };
 
-const uploadFileWithRetry = async (
+export const uploadFileWithRetry = async (
   url: string,
   file: File,
   mimeType: string,
@@ -645,7 +669,7 @@ const uploadFileWithRetry = async (
   throw lastError || new Error("Upload failed after retries.");
 };
 
-const cropImageToSquare = async (file: File): Promise<File> => {
+export const cropImageToSquare = async (file: File): Promise<File> => {
   if (!file.type.startsWith("image/")) {
     return file;
   }
@@ -685,38 +709,81 @@ const cropImageToSquare = async (file: File): Promise<File> => {
   }
 };
 
-const convertImageToSdrIfPossible = async (file: File): Promise<File> => {
-  if (!file.type.startsWith("image/") || typeof createImageBitmap !== "function") {
+export interface ImageResizeOptions {
+  enabled?: boolean;
+  maxDimension?: number;
+}
+
+export const convertImageToSdrIfPossible = async (
+  file: File,
+  options?: ImageResizeOptions,
+): Promise<File> => {
+  if (
+    !file.type.startsWith("image/") ||
+    file.type === "image/gif" ||
+    file.type === "image/svg+xml" ||
+    typeof createImageBitmap !== "function"
+  ) {
     return file;
   }
+
+  const compressionEnabled = options?.enabled ?? true;
+  const maxDim = options?.maxDimension && options.maxDimension > 0 ? options.maxDimension : 2048;
+
   let bitmap: ImageBitmap | null = null;
   try {
     bitmap = await createImageBitmap(file);
+    const origWidth = bitmap.width;
+    const origHeight = bitmap.height;
+
+    const exceedsMaxDim = compressionEnabled && (origWidth > maxDim || origHeight > maxDim);
+
+    if (!exceedsMaxDim && SDR_COMPATIBLE_IMAGE_TYPES.includes(file.type as (typeof SDR_COMPATIBLE_IMAGE_TYPES)[number])) {
+      return file;
+    }
+
+    let targetWidth = origWidth;
+    let targetHeight = origHeight;
+
+    if (exceedsMaxDim) {
+      const scale = maxDim / Math.max(origWidth, origHeight);
+      targetWidth = Math.max(1, Math.round(origWidth * scale));
+      targetHeight = Math.max(1, Math.round(origHeight * scale));
+    }
+
     const canvas = document.createElement("canvas");
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
     const context = canvas.getContext("2d");
     if (!context) {
       return file;
     }
-    context.drawImage(bitmap, 0, 0);
-    const outputType = SDR_COMPATIBLE_IMAGE_TYPES.includes(file.type as (typeof SDR_COMPATIBLE_IMAGE_TYPES)[number])
-      ? file.type
-      : "image/jpeg";
+
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
+
+    const isPng = file.type === "image/png";
+    const isWebp = file.type === "image/webp";
+    const outputType = isPng ? "image/png" : isWebp ? "image/webp" : "image/jpeg";
+    const quality = outputType === "image/png" ? undefined : 0.85;
+
     const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob(resolve, outputType, outputType === "image/png" ? undefined : 0.92);
+      canvas.toBlob(resolve, outputType, quality);
     });
+
     if (!blob) {
       return file;
     }
+
     const extByType: Record<string, string> = {
       "image/jpeg": "jpg",
       "image/png": "png",
       "image/webp": "webp",
     };
     const fallbackExt = extByType[outputType] ?? "jpg";
-    const nextName = file.name.replace(/\.[^.]+$/, "").trim() || "image";
-    return new File([blob], `${nextName}.${fallbackExt}`, {
+    const baseName = file.name.replace(/\.[^.]+$/, "").trim() || "image";
+    return new File([blob], `${baseName}.${fallbackExt}`, {
       type: blob.type || outputType,
       lastModified: file.lastModified,
     });
@@ -759,14 +826,14 @@ const readNextSSEEvent = (buffer: string): { event: string; rest: string } | nul
   };
 };
 
-type StreamSubmitResponse = {
+export type StreamSubmitResponse = {
   job_id: string;
   state: string;
   cursor?: string;
   user_message_id?: string;
 };
 
-type StreamInflightState = {
+export type StreamInflightState = {
   session_id: string;
   job_id: string | null;
   cursor: string;
@@ -774,7 +841,7 @@ type StreamInflightState = {
   created_at: number;
 };
 
-type StreamRecoveryState = {
+export type StreamRecoveryState = {
   session_id: string;
   job_id: string | null;
   cursor: string;
@@ -786,7 +853,7 @@ type StreamRecoveryState = {
   last_error: string | null;
 };
 
-type StreamFailureState = {
+export type StreamFailureState = {
   session_id: string;
   job_id: string;
   user_message_id: string | null;
@@ -797,7 +864,7 @@ type StreamFailureState = {
   created_at: number;
 };
 
-type StreamRecoveryLookupResponse = {
+export type StreamRecoveryLookupResponse = {
   session_id: string;
   job_id: string;
   cursor: string;
@@ -809,7 +876,7 @@ type StreamRecoveryLookupResponse = {
 
 const streamInflightStorageKey = (sessionId: string): string => `${STREAM_INFLIGHT_PREFIX}${sessionId}`;
 
-const persistInflightStream = (sessionId: string, payload: StreamInflightState | null): void => {
+export const persistInflightStream = (sessionId: string, payload: StreamInflightState | null): void => {
   const key = streamInflightStorageKey(sessionId);
   try {
     if (!payload) {
@@ -822,7 +889,7 @@ const persistInflightStream = (sessionId: string, payload: StreamInflightState |
   }
 };
 
-const loadInflightStream = (sessionId: string): StreamInflightState | null => {
+export const loadInflightStream = (sessionId: string): StreamInflightState | null => {
   const key = streamInflightStorageKey(sessionId);
   const raw = localStorage.getItem(key);
   if (!raw) {
@@ -850,10 +917,10 @@ const loadInflightStream = (sessionId: string): StreamInflightState | null => {
   }
 };
 
-const isRecentUserMessage = (message: Message | null | undefined): message is Message =>
+export const isRecentUserMessage = (message: Message | null | undefined): message is Message =>
   Boolean(message && message.role === "user" && Number.isFinite(Number(message.created_at)));
 
-const normalizeCursorSequence = (value: string | null | undefined): { cursor: string; sequence: number } => {
+export const normalizeCursorSequence = (value: string | null | undefined): { cursor: string; sequence: number } => {
   const parsed = Number((value ?? "").trim());
   const sequence = Number.isFinite(parsed) ? Math.floor(parsed) : 0;
   return {
@@ -865,7 +932,7 @@ const normalizeCursorSequence = (value: string | null | undefined): { cursor: st
 const isAbortError = (error: unknown): boolean =>
   error instanceof DOMException ? error.name === "AbortError" : error instanceof Error && error.name === "AbortError";
 
-const waitForAssistantMessage = async (
+export const waitForAssistantMessage = async (
   token: string,
   sessionId: string,
   userMessageCreatedAt: number,
@@ -897,7 +964,7 @@ const waitForAssistantMessage = async (
   throw new Error("Timed out waiting for the assistant response.");
 };
 
-const fetchSessionMessages = async (token: string | null, sessionId: string): Promise<Message[]> => {
+export const fetchSessionMessages = async (token: string | null, sessionId: string): Promise<Message[]> => {
   const data = await requestJson<{ messages: Message[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/messages`, {
     method: "GET",
     token,
@@ -905,7 +972,7 @@ const fetchSessionMessages = async (token: string | null, sessionId: string): Pr
   return data.messages || [];
 };
 
-const fetchStreamRecovery = async (token: string | null, sessionId: string, retry = true): Promise<StreamRecoveryLookupResponse | null> => {
+export const fetchStreamRecovery = async (token: string | null, sessionId: string, retry = true): Promise<StreamRecoveryLookupResponse | null> => {
   let currentToken = token;
   if (!currentToken) {
     currentToken = await useStore.getState().refreshClerkToken(false);
@@ -931,7 +998,7 @@ const fetchStreamRecovery = async (token: string | null, sessionId: string, retr
   return data.recovery ?? null;
 };
 
-const resolveRecoveryUserMessageCreatedAt = (
+export const resolveRecoveryUserMessageCreatedAt = (
   messages: Message[],
   userMessageId: string | null | undefined,
 ): number | null => {
@@ -951,7 +1018,7 @@ const resolveRecoveryUserMessageCreatedAt = (
   return null;
 };
 
-const buildDisconnectedRecoveryState = (
+export const buildDisconnectedRecoveryState = (
   sessionId: string,
   jobId: string | null,
   cursor: string,
@@ -970,7 +1037,7 @@ const buildDisconnectedRecoveryState = (
   last_error: lastError,
 });
 
-const buildStreamFailureState = (
+export const buildStreamFailureState = (
   sessionId: string,
   jobId: string,
   userMessageId: string | null,
@@ -989,7 +1056,7 @@ const buildStreamFailureState = (
   created_at: Date.now(),
 });
 
-const consumeChatStream = async (
+export const consumeChatStream = async (
   token: string | null,
   sessionId: string,
   jobId: string,
@@ -1289,14 +1356,14 @@ const consumeChatStream = async (
   };
 };
 
-const ensureToken = (token: string | null): string => {
+export const ensureToken = (token: string | null): string => {
   if (!token) {
     throw new Error("Authentication required.");
   }
   return token;
 };
 
-const replaceMessageId = (messages: Message[], currentId: string, nextId: string | null): Message[] => {
+export const replaceMessageId = (messages: Message[], currentId: string, nextId: string | null): Message[] => {
   if (!nextId || nextId === currentId) {
     return messages;
   }
@@ -1337,57 +1404,13 @@ export const extractLastThinkingTopic = (text: string): string => {
   return lastTopic;
 };
 
-export const useStore = create<Store>((set, get) => ({
-  authReady: false,
-  authLoading: false,
-  authenticated: false,
-  authMethod: null,
-  token: null,
-  isAdmin: false,
-  canManageAi: false,
-  canViewAllUsers: false,
-  limitsEnabled: false,
-  previewMode: false,
-  backendBuildHash: DEFAULT_BACKEND_BUILD_HASH,
-  backendBuildTime: DEFAULT_BACKEND_BUILD_TIME,
-  instanceId: "",
-  schemaVersion: 0,
+import { createAuthSlice } from "./slices/authSlice";
+import { createChatSlice } from "./slices/chatSlice";
+import { createWorkspaceSlice } from "./slices/workspaceSlice";
+import { createAdminSlice } from "./slices/adminSlice";
+import { createSettingsSlice } from "./slices/settingsSlice";
 
-  sessions: [],
-  sessionsHasMore: false,
-  sessionsLoadingMore: false,
-  sessionId: null,
-  messages: [],
-  loadingMessages: false,
-  sendingMessage: false,
-  streamingMessage: "",
-  streamingReasoning: "",
-    streamingThinkingTopic: "",
-  streamRecovery: null,
-  streamFailure: null,
-
-  profile: null,
-  usage: null,
-  dailyUsage: null,
-  dailyUsageDate: null,
-  userLimits: null,
-  sessionUsage: ZERO_SESSION_USAGE,
-  passkeys: [],
-  models: [],
-  selectedModel: DEFAULT_MODEL,
-  titleModel: DEFAULT_MODEL,
-  chatSettings: DEFAULT_CHAT_SETTINGS,
-  logLevel: DEFAULT_LOG_LEVEL,
-  systemPromptTimezone: "UTC",
-  showArchivedSessions: false,
-  apiCallMode: "fetch",
-  workspaces: [],
-  activeWorkspaceId: null,
-  attachmentLibrary: [],
-  attachmentLibraryLoading: false,
-  libraryItems: [],
-  libraryLoading: false,
-
+export const useStore = create<Store>((set, get, store) => ({
   toasts: [],
   pushToast: (message, type = "info") => {
     const id = crypto.randomUUID();
@@ -1400,2317 +1423,9 @@ export const useStore = create<Store>((set, get) => ({
     set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) }));
   },
 
-  clerkGetToken: null,
-  refreshClerkToken: async (force = false) => {
-    const { clerkGetToken } = get();
-    if (!clerkGetToken) {
-      // Fallback for E2E tests: return token from localStorage if clerk is not initialized
-      const token = localStorage.getItem(TOKEN_STORAGE_KEY);
-      if (token) {
-        set({ token });
-      }
-      return token;
-    }
-    try {
-      const token = await clerkGetToken({ skipCache: force });
-      set({ token });
-      if (token) {
-        localStorage.setItem(TOKEN_STORAGE_KEY, token);
-      }
-      return token;
-    } catch (error) {
-      console.error("Failed to refresh Clerk token", error);
-      return null;
-    }
-  },
-
-  accessDenied: false,
-  accessDeniedMessage: null,
-  setAccessDenied: (denied, message = null) => set({ accessDenied: denied, accessDeniedMessage: message }),
-  setToken: (token) => set({ token }),
-  aiProviders: [],
-  aiProvidersLoading: false,
-  aiModels: [],
-  aiModelsLoading: false,
-  encryptionKeyReady: false,
-
-  adminUsers: [],
-  adminUsersLoading: false,
-
-  initialize: async (clerkGetToken) => {
-    set({ authLoading: true, clerkGetToken: clerkGetToken ?? null });
-
-    // Restore preview session (sessionStorage flag set by loginWithPreviewPassword)
-    if (isPreviewAvailable() && sessionStorage.getItem(PREVIEW_MODE_STORAGE_KEY) === "1") {
-      const mockSessions = buildPreviewSessions();
-      const mockMessages = buildPreviewMessages();
-      previewSessionMessages.clear();
-      for (const [id, msgs] of Object.entries(mockMessages)) {
-        previewSessionMessages.set(id, msgs);
-      }
-      set({
-        authReady: true,
-        authLoading: false,
-        authenticated: true,
-        authMethod: "preview",
-        token: null,
-        previewMode: true,
-        isAdmin: true,
-        backendBuildHash: "preview",
-        backendBuildTime: "",
-        instanceId: "preview-user",
-        schemaVersion: 20,
-        profile: { ...PREVIEW_MOCK_PROFILE, updated_at: Date.now() },
-        sessions: mockSessions,
-        models: PREVIEW_MOCK_MODELS,
-        usage: PREVIEW_MOCK_USAGE,
-        dailyUsage: PREVIEW_MOCK_USAGE,
-        dailyUsageDate: getCurrentUtcDate(),
-        userLimits: PREVIEW_MOCK_LIMITS,
-        selectedModel: DEFAULT_MODEL,
-        titleModel: DEFAULT_MODEL,
-        chatSettings: DEFAULT_CHAT_SETTINGS,
-        logLevel: DEFAULT_LOG_LEVEL,
-        systemPromptTimezone: "UTC",
-        showArchivedSessions: false,
-        apiCallMode: "fetch",
-        workspaces: [{ id: "default", name: "Default Workspace", archived_at: null, created_at: Date.now(), updated_at: Date.now() }],
-        activeWorkspaceId: "default",
-        passkeys: [],
-        sessionUsage: ZERO_SESSION_USAGE,
-        sessionId: null,
-        messages: [],
-        attachmentLibrary: [],
-        attachmentLibraryLoading: false,
-        libraryItems: [],
-        libraryLoading: false,
-        aiProviders: [
-          {
-            id: 'preview-provider-uuid',
-            name: 'Preview Provider',
-            endpoint: 'https://api.openai.com/v1',
-            api_key_masked: 'sk-preview-123...def',
-            is_built_in: false,
-            owner_id: null,
-            owner_email: null,
-            visibility: 'private',
-            created_at: Date.now(),
-            updated_at: Date.now(),
-          },
-          {
-            id: 'preview-error-provider',
-            name: 'Error Provider',
-            endpoint: 'https://api.example.com',
-            api_key_masked: 'Decrypt Error',
-            is_built_in: false,
-            owner_id: null,
-            owner_email: null,
-            visibility: 'private',
-            created_at: Date.now(),
-            updated_at: Date.now(),
-          }
-        ],
-        aiProvidersLoading: false,
-        aiModels: [
-          {
-            id: 'preview-model-uuid',
-            provider_id: 'preview-provider-uuid',
-            model_id: 'openai/gpt-4o',
-            name: 'GPT-4o (Preview)',
-            input_usd_per_million: 2.5,
-            output_usd_per_million: 10,
-            is_active: true,
-            created_at: Date.now(),
-            updated_at: Date.now(),
-            provider_name: 'Preview Provider',
-          }
-        ],
-        aiModelsLoading: false,
-        encryptionKeyReady: true,
-        streamFailure: null,
-      });
-      return;
-    }
-
-    let effectiveToken = localStorage.getItem(TOKEN_STORAGE_KEY);
-    if (clerkGetToken) {
-      try {
-        effectiveToken = await clerkGetToken();
-      } catch (error) {
-        console.error("Failed to get Clerk token during initialize", error);
-      }
-    }
-
-    if (!effectiveToken) {
-      set({
-        authReady: true,
-        authLoading: false,
-        authenticated: false,
-        token: null,
-        streamFailure: null,
-      });
-      return;
-    }
-
-    try {
-      const me = await requestJson<{
-        method: AuthMethod;
-        is_admin?: boolean;
-        can_manage_ai?: boolean;
-        can_view_all_users?: boolean;
-        profile: UserProfile;
-        selected_model: string;
-        title_model: string;
-        chat_settings?: Partial<ChatGenerationSettings>;
-        log_level?: LogLevel;
-        system_prompt_timezone?: string;
-        show_archived_sessions?: boolean;
-        active_workspace_id?: string;
-        api_call_mode?: "sdk" | "fetch";
-        backend_build_hash?: string;
-        backend_build_time?: string;
-        instance_id?: string;
-        schema_version?: number | string;
-        limits_enabled?: boolean;
-        limits?: UserLimitsStatus | null;
-      }>("/api/auth/me", { method: "GET", token: effectiveToken });
-
-      set({
-        token: effectiveToken,
-        authenticated: true,
-        authMethod: me.method,
-        isAdmin: Boolean(me.is_admin),
-        canManageAi: Boolean(me.can_manage_ai),
-        canViewAllUsers: Boolean(me.can_view_all_users),
-        limitsEnabled: Boolean(me.limits_enabled),
-        accessDenied: false,
-        accessDeniedMessage: null,
-        backendBuildHash: typeof me.backend_build_hash === "string" && me.backend_build_hash.trim()
-          ? me.backend_build_hash.trim()
-          : DEFAULT_BACKEND_BUILD_HASH,
-        backendBuildTime: typeof me.backend_build_time === "string" ? me.backend_build_time.trim() : DEFAULT_BACKEND_BUILD_TIME,
-        profile: me.profile,
-        instanceId: me.instance_id || "",
-        schemaVersion: Number(me.schema_version) || 0,
-        selectedModel: me.selected_model || DEFAULT_MODEL,
-        titleModel: me.title_model || me.selected_model || DEFAULT_MODEL,
-        chatSettings: normalizeChatSettings(me.chat_settings),
-        logLevel: normalizeLogLevel(me.log_level),
-        systemPromptTimezone: typeof me.system_prompt_timezone === "string" && me.system_prompt_timezone.trim() ? me.system_prompt_timezone : "UTC",
-        showArchivedSessions: Boolean(me.show_archived_sessions),
-        apiCallMode: me.api_call_mode || "fetch",
-        activeWorkspaceId: typeof me.active_workspace_id === "string" && me.active_workspace_id.trim() ? me.active_workspace_id : null,
-        userLimits: me.limits || null,
-      });
-
-      await Promise.all([
-        get().refreshWorkspaces(true),
-        get().refreshSessions(),
-        get().refreshUsage(),
-        get().refreshSessionUsage(),
-        get().refreshModels(),
-        get().refreshAiProviders(),
-        get().refreshAiModels(),
-        get().refreshPasskeys(),
-      ]);
-      warnBudget(get());
-    } catch (error) {
-      const errorMessage = getErrorMessage(error);
-      if (errorMessage.includes("Access Denied") || errorMessage.includes("whitelist")) {
-        set({ accessDenied: true, accessDeniedMessage: errorMessage });
-      }
-      localStorage.removeItem(TOKEN_STORAGE_KEY);
-      set({
-        token: null,
-        authenticated: false,
-        authMethod: null,
-        isAdmin: false,
-        canManageAi: false,
-        canViewAllUsers: false,
-        limitsEnabled: false,
-        backendBuildHash: DEFAULT_BACKEND_BUILD_HASH,
-        backendBuildTime: DEFAULT_BACKEND_BUILD_TIME,
-      instanceId: "",
-      schemaVersion: 0,
-        sessions: [],
-        sessionId: null,
-        messages: [],
-        streamingReasoning: "",
-        profile: null,
-        usage: null,
-        dailyUsage: null,
-        dailyUsageDate: null,
-        sessionUsage: ZERO_SESSION_USAGE,
-        titleModel: DEFAULT_MODEL,
-        chatSettings: DEFAULT_CHAT_SETTINGS,
-        logLevel: DEFAULT_LOG_LEVEL,
-        systemPromptTimezone: "UTC",
-        showArchivedSessions: false,
-        workspaces: [],
-        activeWorkspaceId: null,
-      aiProviders: [],
-        aiModels: [],
-        adminUsers: [],
-        streamFailure: null,
-      });
-      console.error(error);
-    } finally {
-      set({ authReady: true, authLoading: false });
-    }
-  },
-
-  loginWithPassword: async (password) => {
-    const trimmedPassword = password.trim();
-    if (!trimmedPassword) {
-      throw new Error("Password is required.");
-    }
-
-    set({ authLoading: true });
-    try {
-      const data = await requestJson<{ token: string }>("/api/auth/password-login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: trimmedPassword }),
-      });
-
-      localStorage.setItem(TOKEN_STORAGE_KEY, data.token);
-      set({
-        token: data.token,
-        authenticated: true,
-        authMethod: "password",
-        streamRecovery: null,
-        streamFailure: null,
-      });
-
-      await Promise.all([
-        get().refreshProfile(),
-        get().refreshWorkspaces(true),
-        get().refreshSessions(),
-        get().refreshUsage(),
-        get().refreshSessionUsage(),
-        get().refreshModels(),
-      ]);
-      void get().refreshAttachmentLibrary().catch((error) => {
-        console.error("Failed to refresh attachment library after password login", error);
-      });
-      void get().refreshLibrary().catch((error) => {
-        console.error("Failed to refresh library after password login", error);
-      });
-      await get().refreshPasskeys();
-      get().pushToast("Logged in with password.", "success");
-    } catch (error) {
-      const message = getErrorMessage(error);
-      get().pushToast(message, "error");
-      throw new Error(message);
-    } finally {
-      set({ authLoading: false });
-    }
-  },
-
-  loginWithPasskey: async () => {
-    set({ authLoading: true });
-    try {
-      const begin = await requestJson<{ options: Parameters<typeof startAuthentication>[0] }>(
-        "/api/auth/passkeys/auth-options",
-        { method: "POST" },
-      );
-      const passkeyResponse = await startAuthentication(begin.options);
-
-      const finish = await requestJson<{ token: string }>("/api/auth/passkeys/auth-verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ response: passkeyResponse }),
-      });
-
-      localStorage.setItem(TOKEN_STORAGE_KEY, finish.token);
-      set({
-        token: finish.token,
-        authenticated: true,
-        authMethod: "passkey",
-        streamRecovery: null,
-        streamFailure: null,
-      });
-
-      await Promise.all([
-        get().refreshProfile(),
-        get().refreshWorkspaces(true),
-        get().refreshSessions(),
-        get().refreshUsage(),
-        get().refreshSessionUsage(),
-        get().refreshModels(),
-      ]);
-      void get().refreshAttachmentLibrary().catch((error) => {
-        console.error("Failed to refresh attachment library after passkey login", error);
-      });
-      void get().refreshLibrary().catch((error) => {
-        console.error("Failed to refresh library after passkey login", error);
-      });
-      await get().refreshPasskeys();
-      get().pushToast("Logged in with passkey.", "success");
-    } catch (error) {
-      const message = getErrorMessage(error);
-      get().pushToast(message, "error");
-      throw new Error(message);
-    } finally {
-      set({ authLoading: false });
-    }
-  },
-
-  loginWithPreviewPassword: () => {
-    const mockSessions = buildPreviewSessions();
-    const mockMessages = buildPreviewMessages();
-    previewSessionMessages.clear();
-    for (const [id, msgs] of Object.entries(mockMessages)) {
-      previewSessionMessages.set(id, msgs);
-    }
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
-    sessionStorage.setItem(PREVIEW_MODE_STORAGE_KEY, "1");
-    set({
-      authenticated: true,
-      authMethod: "preview",
-      token: null,
-      previewMode: true,
-      isAdmin: true,
-      backendBuildHash: "preview",
-      backendBuildTime: "",
-      instanceId: "preview-user",
-      schemaVersion: 20,
-      profile: { ...PREVIEW_MOCK_PROFILE, updated_at: Date.now() },
-      sessions: mockSessions,
-      models: PREVIEW_MOCK_MODELS,
-      usage: PREVIEW_MOCK_USAGE,
-      dailyUsage: PREVIEW_MOCK_USAGE,
-      dailyUsageDate: getCurrentUtcDate(),
-      userLimits: PREVIEW_MOCK_LIMITS,
-      selectedModel: DEFAULT_MODEL,
-      titleModel: DEFAULT_MODEL,
-      chatSettings: DEFAULT_CHAT_SETTINGS,
-      logLevel: DEFAULT_LOG_LEVEL,
-      systemPromptTimezone: "UTC",
-      showArchivedSessions: false,
-      workspaces: [{ id: "default", name: "Default Workspace", archived_at: null, created_at: Date.now(), updated_at: Date.now() }],
-      activeWorkspaceId: "default",
-      passkeys: [],
-      sessionUsage: ZERO_SESSION_USAGE,
-      sessionId: null,
-      messages: [],
-      attachmentLibrary: [],
-      attachmentLibraryLoading: false,
-      libraryItems: [],
-      libraryLoading: false,
-      aiProviders: [],
-      aiProvidersLoading: false,
-      aiModels: [],
-      aiModelsLoading: false,
-      encryptionKeyReady: false,
-      adminUsers: [],
-      adminUsersLoading: false,
-      streamRecovery: null,
-      streamFailure: null,
-    });
-    get().pushToast("Logged in (preview mode — example data only).", "info");
-  },
-
-  logout: () => {
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
-    sessionStorage.removeItem(PREVIEW_MODE_STORAGE_KEY);
-    previewSessionMessages.clear();
-    set({
-      authenticated: false,
-      authMethod: null,
-      token: null,
-      previewMode: false,
-      backendBuildHash: DEFAULT_BACKEND_BUILD_HASH,
-      backendBuildTime: DEFAULT_BACKEND_BUILD_TIME,
-      instanceId: "",
-      schemaVersion: 0,
-      sessions: [],
-      sessionId: null,
-      messages: [],
-      streamingMessage: "",
-      streamingReasoning: "",
-      streamingThinkingTopic: "",
-      loadingMessages: false,
-      sendingMessage: false,
-      profile: null,
-      usage: null,
-      dailyUsage: null,
-      dailyUsageDate: null,
-      sessionUsage: ZERO_SESSION_USAGE,
-      passkeys: [],
-      models: [],
-      selectedModel: DEFAULT_MODEL,
-      titleModel: DEFAULT_MODEL,
-      chatSettings: DEFAULT_CHAT_SETTINGS,
-      logLevel: DEFAULT_LOG_LEVEL,
-      systemPromptTimezone: "UTC",
-      showArchivedSessions: false,
-      workspaces: [],
-      activeWorkspaceId: null,
-      attachmentLibrary: [],
-      attachmentLibraryLoading: false,
-      libraryItems: [],
-      libraryLoading: false,
-      aiProviders: [],
-      aiModels: [],
-      encryptionKeyReady: false,
-      adminUsers: [],
-      adminUsersLoading: false,
-      isAdmin: false,
-      canManageAi: false,
-      canViewAllUsers: false,
-      limitsEnabled: false,
-      streamRecovery: null,
-      streamFailure: null,
-    });
-  },
-
-  refreshSessions: async () => {
-    if (get().previewMode) {
-      return; // Sessions are managed locally in preview mode
-    }
-    const token = ensureToken(get().token);
-    const includeArchived = get().showArchivedSessions ? "1" : "0";
-    const data = await requestJson<{ sessions: Session[]; has_more: boolean }>(
-      `/api/sessions?include_archived=${includeArchived}&limit=50&offset=0`,
-      {
-        method: "GET",
-        token,
-      },
-    );
-    set({ sessions: data.sessions || [], sessionsHasMore: Boolean(data.has_more) });
-  },
-
-  loadMoreSessions: async () => {
-    if (get().previewMode || !get().sessionsHasMore || get().sessionsLoadingMore) {
-      return;
-    }
-    set({ sessionsLoadingMore: true });
-    try {
-      const token = ensureToken(get().token);
-      const includeArchived = get().showArchivedSessions ? "1" : "0";
-      const offset = get().sessions.length;
-      const data = await requestJson<{ sessions: Session[]; has_more: boolean }>(
-        `/api/sessions?include_archived=${includeArchived}&limit=50&offset=${offset}`,
-        {
-          method: "GET",
-          token,
-        },
-      );
-      set((state) => ({
-        sessions: [...state.sessions, ...(data.sessions || [])],
-        sessionsHasMore: Boolean(data.has_more),
-      }));
-    } finally {
-      set({ sessionsLoadingMore: false });
-    }
-  },
-
-  selectSession: async (sessionId) => {
-    if (get().previewMode) {
-      const messages = previewSessionMessages.get(sessionId) ?? [];
-      set({
-        sessionId,
-        messages,
-        loadingMessages: false,
-        streamingMessage: "",
-        streamingReasoning: "",
-        streamingThinkingTopic: "",
-        sessionUsage: ZERO_SESSION_USAGE,
-        streamRecovery: null,
-        streamFailure: null,
-      });
-      return;
-    }
-    const token = ensureToken(get().token);
-    const isSameSession = get().sessionId === sessionId;
-    set({
-      sessionId,
-      loadingMessages: true,
-      streamingMessage: isSameSession ? get().streamingMessage : "",
-      streamingReasoning: isSameSession ? get().streamingReasoning : "",
-      streamRecovery: null,
-      streamFailure: null,
-    });
-    try {
-      const currentMessages = await fetchSessionMessages(token, sessionId);
-      set({ messages: currentMessages });
-      try {
-      await get().refreshUsage();
-      await get().refreshSessionUsage(sessionId);
-      } catch {
-        set({ sessionUsage: ZERO_SESSION_USAGE });
-      }
-      const inflight = loadInflightStream(sessionId);
-      const latestVisibleMessage = [...currentMessages].reverse().find((message) => message.role !== "system");
-      const recentUserMessage = isRecentUserMessage(latestVisibleMessage)
-        && Date.now() - Number(latestVisibleMessage.created_at) <= STREAM_INFLIGHT_MAX_AGE_MS
-        ? latestVisibleMessage
-        : null;
-
-      if (inflight && inflight.job_id) {
-        const currentContent = get().streamingMessage;
-        const currentReasoning = get().streamingReasoning;
-        set({ sendingMessage: true, streamFailure: null });
-        try {
-          const resumeCursor = normalizeCursorSequence(inflight.cursor);
-          const cursorToUse = (currentContent || currentReasoning) ? resumeCursor.cursor : "";
-          const streamResult = await consumeChatStream(
-            get().token,
-            sessionId,
-            inflight.job_id,
-            cursorToUse,
-            get().logLevel,
-            (nextContent) => {
-              if (get().sessionId === sessionId) set({ streamingMessage: nextContent });
-            },
-            (nextReasoning) => {
-              if (get().sessionId === sessionId) set({ streamingReasoning: nextReasoning, streamingThinkingTopic: extractLastThinkingTopic(nextReasoning) });
-            },
-            currentContent,
-            currentReasoning,
-          );
-          const persistedUserMessageId = streamResult.userMessageId ?? inflight.user_message_id;
-          if (streamResult.failure) {
-            persistInflightStream(sessionId, null);
-            set({
-              messages: currentMessages,
-              streamingMessage: streamResult.content,
-              streamingReasoning: streamResult.reasoning,
-              streamRecovery: null,
-              streamFailure: buildStreamFailureState(
-                sessionId,
-                inflight.job_id,
-                persistedUserMessageId,
-                resolveRecoveryUserMessageCreatedAt(currentMessages, persistedUserMessageId),
-                streamResult.failure,
-                streamResult.content,
-                streamResult.reasoning,
-              ),
-            });
-            await get().refreshSessions();
-      await get().refreshUsage();
-      await get().refreshSessionUsage(sessionId);
-            return;
-          }
-          if (streamResult.warning) {
-            const latestCursor = normalizeCursorSequence(streamResult.cursor).cursor;
-            persistInflightStream(sessionId, {
-              session_id: sessionId,
-              job_id: inflight.job_id,
-              cursor: latestCursor,
-              user_message_id: persistedUserMessageId,
-              created_at: Date.now(),
-            });
-            set({
-              streamRecovery: {
-                session_id: sessionId,
-                job_id: inflight.job_id,
-                cursor: latestCursor,
-                user_message_id: persistedUserMessageId,
-                user_message_created_at: resolveRecoveryUserMessageCreatedAt(get().messages, persistedUserMessageId),
-                new_session: false,
-                created_at: Date.now(),
-                mode: "disconnected",
-                last_error: "SSE disconnected. You can reconnect to Durable Object or wait for completion.",
-              },
-            });
-          } else {
-            persistInflightStream(sessionId, null);
-            const refreshedMessages = await fetchSessionMessages(ensureToken(get().token), sessionId);
-            set({
-              messages: refreshedMessages,
-              streamingMessage: "",
-              streamingReasoning: "",
-              streamRecovery: null,
-            });
-            await get().refreshSessions();
-      await get().refreshUsage();
-      await get().refreshSessionUsage(sessionId);
-          }
-        } catch (resumeError) {
-          persistInflightStream(sessionId, {
-            session_id: sessionId,
-            job_id: inflight.job_id,
-            cursor: normalizeCursorSequence(inflight.cursor).cursor,
-            user_message_id: inflight.user_message_id,
-            created_at: Date.now(),
-          });
-          set({
-            streamRecovery: {
-              session_id: sessionId,
-              job_id: inflight.job_id,
-              cursor: normalizeCursorSequence(inflight.cursor).cursor,
-              user_message_id: inflight.user_message_id,
-              user_message_created_at: resolveRecoveryUserMessageCreatedAt(get().messages, inflight.user_message_id),
-              new_session: false,
-              created_at: Date.now(),
-              mode: "disconnected",
-              last_error: `Failed to recover streaming session: ${getErrorMessage(resumeError)}`,
-            },
-            streamingMessage: "",
-            streamingReasoning: "",
-          });
-          get().pushToast(`Failed to recover streaming session: ${getErrorMessage(resumeError)}`, "error");
-        } finally {
-          set({ sendingMessage: false });
-        }
-      } else if (inflight || recentUserMessage) {
-        let recoveryRecord: StreamRecoveryLookupResponse | null = null;
-        for (let attempt = 0; attempt < 6; attempt += 1) {
-          recoveryRecord = await fetchStreamRecovery(token, sessionId);
-          if (recoveryRecord) {
-            break;
-          }
-          if (attempt < 5) {
-            await new Promise((resolve) => { window.setTimeout(resolve, 500); });
-          }
-        }
-
-        if (recoveryRecord && (recoveryRecord.state === "queued" || recoveryRecord.state === "running")) {
-          const resolvedCursor = normalizeCursorSequence(recoveryRecord.cursor).cursor;
-          persistInflightStream(sessionId, {
-            session_id: sessionId,
-            job_id: recoveryRecord.job_id,
-            cursor: resolvedCursor,
-            user_message_id: recoveryRecord.user_message_id,
-            created_at: Date.now(),
-          });
-          set({
-            streamRecovery: buildDisconnectedRecoveryState(
-              sessionId,
-              recoveryRecord.job_id,
-              resolvedCursor,
-              recoveryRecord.user_message_id,
-              resolveRecoveryUserMessageCreatedAt(currentMessages, recoveryRecord.user_message_id),
-              "SSE disconnected. You can reconnect to Durable Object or wait for completion.",
-            ),
-            streamFailure: null,
-          });
-          return;
-        }
-
-        const recoveryUserMessageId = inflight?.user_message_id ?? recentUserMessage?.id ?? null;
-        const hasRecoveryJob = Boolean(inflight?.job_id);
-        const recoveryCreatedAt = resolveRecoveryUserMessageCreatedAt(currentMessages, recoveryUserMessageId)
-          ?? (inflight ? Number(inflight.created_at) : null)
-          ?? (recentUserMessage ? Number(recentUserMessage.created_at) : null);
-        if (hasRecoveryJob && recoveryUserMessageId) {
-          set({
-            streamRecovery: buildDisconnectedRecoveryState(
-              sessionId,
-              inflight?.job_id ?? null,
-              normalizeCursorSequence(inflight?.cursor ?? "").cursor,
-              recoveryUserMessageId,
-              Number.isFinite(recoveryCreatedAt) ? recoveryCreatedAt : null,
-              inflight?.job_id
-                ? "SSE disconnected. You can reconnect to Durable Object or wait for completion."
-                : "The backend may still be generating. You can wait for completion.",
-            ),
-            streamFailure: null,
-          });
-        }
-      }
-    } catch (error) {
-      get().pushToast(getErrorMessage(error), "error");
-      throw error;
-    } finally {
-      set({ loadingMessages: false });
-    }
-  },
-
-  clearSession: () => {
-    warnBudget(get());
-    set({
-      sessionId: null,
-      messages: [],
-      streamingMessage: "",
-      streamingReasoning: "",
-      loadingMessages: false,
-      sessionUsage: ZERO_SESSION_USAGE,
-      streamRecovery: null,
-      streamFailure: null,
-    });
-  },
-
-  sendMessage: async (content, attachments = []) => {
-    const trimmedContent = content.trim();
-    if ((trimmedContent.length === 0 && attachments.length === 0) || get().sendingMessage) {
-      return;
-    }
-
-    // Preview mode: simulate streaming locally, no backend calls
-    if (get().previewMode) {
-      let currentSessionId = get().sessionId;
-      let newSession = false;
-      if (!currentSessionId) {
-        currentSessionId = crypto.randomUUID();
-        newSession = true;
-        set({ sessionId: currentSessionId, sessionUsage: ZERO_SESSION_USAGE });
-      }
-      const userMessage: Message = {
-        id: crypto.randomUUID(),
-        session_id: currentSessionId,
-        role: "user",
-        content: trimmedContent,
-        attachments,
-        created_at: Date.now(),
-        model: null,
-      };
-      set((state) => ({
-        sendingMessage: true,
-        streamingMessage: "",
-        streamingReasoning: "",
-        streamingThinkingTopic: "",
-        streamFailure: null,
-        streamRecovery: null,
-        messages: [...state.messages, userMessage]
-      }));
-      try {
-        const responseText = PREVIEW_RESPONSE_TEXTS[Math.floor(Math.random() * PREVIEW_RESPONSE_TEXTS.length)];
-        let streamed = "";
-        const chunkSize = 4;
-        for (let i = 0; i < responseText.length; i += chunkSize) {
-          await new Promise<void>((resolve) => { window.setTimeout(resolve, PREVIEW_STREAM_CHUNK_DELAY_MS); });
-          streamed += responseText.slice(i, i + chunkSize);
-          set({ streamingMessage: streamed });
-        }
-        const assistantMessage: Message = {
-          id: crypto.randomUUID(),
-          session_id: currentSessionId,
-          role: "assistant",
-          content: streamed,
-          attachments: [],
-          created_at: Date.now(),
-          model: get().selectedModel,
-          reasoning_summary: null,
-        };
-        set((state) => ({
-          messages: [...state.messages, assistantMessage],
-          streamingMessage: "",
-          streamingReasoning: "",
-          sessionUsage: { total_tokens: state.sessionUsage.total_tokens + 50, total_cost_usd: state.sessionUsage.total_cost_usd + 0.0001 },
-        }));
-        const finalMessages = get().messages.filter((m) => m.session_id === currentSessionId);
-        previewSessionMessages.set(currentSessionId, finalMessages);
-        if (newSession) {
-          const newSessionItem: Session = { id: currentSessionId, title: trimmedContent.slice(0, 40) || "New Chat", created_at: Date.now(), archived_at: null, pinned_at: null };
-          set((state) => ({ sessions: [newSessionItem, ...state.sessions] }));
-        }
-      } finally {
-        set({ sendingMessage: false });
-      }
-      return;
-    }
-
-    const token = ensureToken(get().token);
-    let sessionId = get().sessionId;
-    let newSession = false;
-
-    if (!sessionId) {
-      sessionId = crypto.randomUUID();
-      newSession = true;
-      set({ sessionId, sessionUsage: ZERO_SESSION_USAGE });
-    }
-
-    const userMessage: Message = {
-      id: crypto.randomUUID(),
-      session_id: sessionId,
-      role: "user",
-      content: trimmedContent,
-      attachments,
-      created_at: Date.now(),
-      model: null,
-    };
-
-    set((state) => ({
-      sendingMessage: true,
-      streamingMessage: "",
-      streamingReasoning: "",
-      streamingThinkingTopic: "",
-      streamRecovery: null,
-      messages: [...state.messages, userMessage],
-    }));
-
-    try {
-      const budgetStatus = calcBudgetStatus(
-        get().dailyUsage,
-        get().chatSettings,
-        get().models,
-        get().selectedModel,
-      );
-      const dynamicMax = resolveMaxOutputTokensOverride(get().chatSettings, budgetStatus);
-      if (budgetStatus.available_output_tokens !== null && budgetStatus.available_output_tokens < 4000) {
-        const ok = window.confirm(`当前可用输出约 ${(budgetStatus.available_output_tokens ?? 0)} tokens，继续可能被阻断。是否继续？`);
-        if (!ok) {
-          throw new Error("已取消发送：预算剩余不足。");
-        }
-      }
-      persistInflightStream(sessionId, {
-        session_id: sessionId,
-        job_id: null,
-        cursor: "",
-        user_message_id: userMessage.id,
-        created_at: Date.now(),
-      });
-      const submit = await requestJson<StreamSubmitResponse>("/api/chat/stream", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        token,
-        body: JSON.stringify({
-          session_id: sessionId,
-          message: trimmedContent,
-          attachments,
-          new_session: newSession,
-          request_source: "send_message",
-          model: get().selectedModel,
-          max_output_tokens_override: dynamicMax,
-          client_request_id: userMessage.id,
-        }),
-      });
-      const jobId = submit.job_id;
-      const normalizedSubmitCursor = normalizeCursorSequence(submit.cursor ?? "");
-      const streamCursor = normalizedSubmitCursor.cursor;
-      const serverUserMessageId = submit.user_message_id?.trim() || null;
-      persistInflightStream(sessionId, {
-        session_id: sessionId,
-        job_id: jobId,
-        cursor: streamCursor,
-        user_message_id: serverUserMessageId,
-        created_at: Date.now(),
-      });
-      const streamResult = await consumeChatStream(
-        get().token,
-        sessionId,
-        jobId,
-        streamCursor,
-        get().logLevel,
-        (nextContent) => {
-          if (get().sessionId === sessionId) set({ streamingMessage: nextContent });
-        },
-        (nextReasoning) => {
-          if (get().sessionId === sessionId) set({ streamingReasoning: nextReasoning, streamingThinkingTopic: extractLastThinkingTopic(nextReasoning) });
-        },
-        get().streamingMessage,
-        get().streamingReasoning,
-      );
-      persistInflightStream(sessionId, null);
-      const persistedUserMessageId = streamResult.userMessageId ?? serverUserMessageId ?? userMessage.id;
-
-      if (streamResult.failure) {
-        set((state) => ({
-          messages: replaceMessageId(state.messages, userMessage.id, persistedUserMessageId),
-          streamingMessage: streamResult.content,
-          streamingReasoning: streamResult.reasoning,
-          streamFailure: buildStreamFailureState(
-            sessionId,
-            jobId,
-            persistedUserMessageId,
-            Number.isFinite(Number(userMessage.created_at)) ? Number(userMessage.created_at) : null,
-            streamResult.failure,
-            streamResult.content,
-            streamResult.reasoning,
-          ),
-        }));
-        if (newSession) {
-          await get().refreshSessions();
-        }
-      await get().refreshUsage();
-      await get().refreshSessionUsage(sessionId);
-        return;
-      }
-
-      let assistantMessage: Message;
-      if (streamResult.warning) {
-        const recoveredAssistant = await waitForAssistantMessage(token, sessionId, userMessage.created_at, get().logLevel);
-        assistantMessage = {
-          ...recoveredAssistant,
-          attachments: recoveredAssistant.attachments ?? [],
-        };
-      } else {
-        assistantMessage = {
-          id: crypto.randomUUID(),
-          session_id: sessionId,
-          role: "assistant",
-          content: streamResult.content,
-          created_at: Date.now(),
-          model: get().selectedModel,
-          reasoning_summary: streamResult.reasoning.trim() || null,
-        };
-      }
-
-      set((state) => ({
-        messages: [
-          ...replaceMessageId(state.messages, userMessage.id, persistedUserMessageId),
-          assistantMessage,
-        ],
-        streamingMessage: "",
-        streamingReasoning: "",
-        streamingThinkingTopic: "",
-        streamFailure: null,
-        sendingMessage: false, // Set sendingMessage to false atomically with messages update
-      }));
-
-      if (newSession) {
-        await get().refreshSessions();
-      }
-      await get().refreshUsage();
-      await get().refreshSessionUsage(sessionId);
-
-      warnBudget(get());
-      if (streamResult.warning) {
-        get().pushToast(streamResult.warning, "info");
-      }
-    } catch (error) {
-      persistInflightStream(sessionId, null);
-      get().pushToast(getErrorMessage(error), "error");
-      set({ streamingMessage: "", streamingReasoning: "", streamingThinkingTopic: "", streamFailure: null, streamRecovery: null, sendingMessage: false });
-      throw error;
-    } finally {
-      // sendingMessage is now handled in successful set or catch set
-    }
-  },
-
-  regenerateLastMessage: async () => {
-    if (get().sendingMessage) {
-      return;
-    }
-
-    const messages = get().messages;
-    let lastVisibleIndex = -1;
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      if (messages[index].role !== "system") {
-        lastVisibleIndex = index;
-        break;
-      }
-    }
-    if (lastVisibleIndex < 0) {
-      return;
-    }
-
-    const lastVisibleMessage = messages[lastVisibleIndex];
-    let sourceUserMessage: Message | null = null;
-
-    if (lastVisibleMessage.role === "assistant") {
-      for (let index = lastVisibleIndex - 1; index >= 0; index -= 1) {
-        if (messages[index].role === "user") {
-          sourceUserMessage = messages[index];
-          break;
-        }
-      }
-      if (!sourceUserMessage) {
-        return;
-      }
-    } else if (lastVisibleMessage.role === "user") {
-      sourceUserMessage = lastVisibleMessage;
-    }
-
-    if (!sourceUserMessage) {
-      return;
-    }
-
-    const trimmedContent = sourceUserMessage.content.trim();
-    const attachments = sourceUserMessage.attachments ?? [];
-    if (trimmedContent.length === 0 && attachments.length === 0) {
-      return;
-    }
-
-    const filteredMessages = messages.slice(0, lastVisibleMessage.role === "assistant" ? lastVisibleIndex : lastVisibleIndex + 1);
-
-    set({
-      sendingMessage: true,
-      streamingMessage: "",
-      streamingReasoning: "",
-      streamingThinkingTopic: "",
-      streamFailure: null,
-      streamRecovery: null,
-      messages: filteredMessages,
-    });
-
-    if (get().previewMode) {
-      const sessionId = sourceUserMessage.session_id || get().sessionId;
-      if (!sessionId) {
-        set({ sendingMessage: false });
-        return;
-      }
-      try {
-        const responseText = PREVIEW_RESPONSE_TEXTS[Math.floor(Math.random() * PREVIEW_RESPONSE_TEXTS.length)];
-        let streamed = "";
-        const chunkSize = 4;
-        for (let i = 0; i < responseText.length; i += chunkSize) {
-          await new Promise<void>((resolve) => {
-            window.setTimeout(resolve, PREVIEW_STREAM_CHUNK_DELAY_MS);
-          });
-          streamed += responseText.slice(i, i + chunkSize);
-          set({ streamingMessage: streamed });
-        }
-        const assistantMessage: Message = {
-          id: crypto.randomUUID(),
-          session_id: sessionId,
-          role: "assistant",
-          content: streamed,
-          attachments: [],
-          created_at: Date.now(),
-          model: get().selectedModel,
-          reasoning_summary: null,
-        };
-        set((state) => ({
-          messages: [...state.messages, assistantMessage],
-          streamingMessage: "",
-          streamingReasoning: "",
-          streamingThinkingTopic: "",
-          sessionUsage: { total_tokens: state.sessionUsage.total_tokens + 50, total_cost_usd: state.sessionUsage.total_cost_usd + 0.0001 },
-        }));
-        const finalMessages = get().messages.filter((message) => message.session_id === sessionId);
-        previewSessionMessages.set(sessionId, finalMessages);
-      } finally {
-        set({ sendingMessage: false });
-      }
-      return;
-    }
-
-    const sessionId = sourceUserMessage.session_id || get().sessionId;
-    if (!sessionId) {
-      set({ sendingMessage: false });
-      return;
-    }
-
-    try {
-      const token = ensureToken(get().token);
-      const budgetStatus = calcBudgetStatus(
-        get().dailyUsage,
-        get().chatSettings,
-        get().models,
-        get().selectedModel,
-      );
-      if (budgetStatus.available_output_tokens !== null && budgetStatus.available_output_tokens < 4000) {
-        const ok = window.confirm(`当前可用输出约 ${(budgetStatus.available_output_tokens ?? 0)} tokens，继续可能被阻断。是否继续？`);
-        if (!ok) {
-          throw new Error("已取消发送：预算剩余不足。");
-        }
-      }
-      persistInflightStream(sessionId, {
-        session_id: sessionId,
-        job_id: null,
-        cursor: "",
-        user_message_id: sourceUserMessage.id,
-        created_at: Date.now(),
-      });
-      const submit = await requestJson<StreamSubmitResponse>("/api/chat/stream", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        token,
-        body: JSON.stringify({
-          session_id: sessionId,
-          message: trimmedContent,
-          attachments,
-          new_session: false,
-          request_source: "regenerate_message",
-          model: get().selectedModel,
-          regenerate_user_message_id: sourceUserMessage.id,
-          max_output_tokens_override: resolveMaxOutputTokensOverride(
-            get().chatSettings,
-            budgetStatus,
-          ),
-          client_request_id: sourceUserMessage.id,
-        }),
-      });
-      const normalizedSubmitCursor = normalizeCursorSequence(submit.cursor ?? "");
-      persistInflightStream(sessionId, {
-        session_id: sessionId,
-        job_id: submit.job_id,
-        cursor: normalizedSubmitCursor.cursor,
-        user_message_id: submit.user_message_id?.trim() || null,
-        created_at: Date.now(),
-      });
-      const streamResult = await consumeChatStream(
-        get().token,
-        sessionId,
-        submit.job_id,
-        normalizedSubmitCursor.cursor,
-        get().logLevel,
-        (nextContent) => {
-          if (get().sessionId === sessionId) set({ streamingMessage: nextContent });
-        },
-        (nextReasoning) => {
-          if (get().sessionId === sessionId) set({ streamingReasoning: nextReasoning, streamingThinkingTopic: extractLastThinkingTopic(nextReasoning) });
-        },
-        get().streamingMessage,
-        get().streamingReasoning,
-      );
-      persistInflightStream(sessionId, null);
-      const persistedUserMessageId = streamResult.userMessageId ?? submit.user_message_id ?? sourceUserMessage.id;
-
-      if (streamResult.failure) {
-        set((state) => ({
-          messages: replaceMessageId(state.messages, sourceUserMessage.id, persistedUserMessageId),
-          streamingMessage: streamResult.content,
-          streamingReasoning: streamResult.reasoning,
-          streamFailure: buildStreamFailureState(
-            sessionId,
-            submit.job_id,
-            persistedUserMessageId,
-            sourceUserMessage.created_at,
-            streamResult.failure,
-            streamResult.content,
-            streamResult.reasoning,
-          ),
-        }));
-      await get().refreshUsage();
-      await get().refreshSessionUsage(sessionId);
-
-        return;
-      }
-
-      const assistantMessage: Message = {
-        id: crypto.randomUUID(),
-        session_id: sessionId,
-        role: "assistant",
-        content: streamResult.content,
-        attachments: [],
-        created_at: Date.now(),
-        model: get().selectedModel,
-        reasoning_summary: streamResult.reasoning.trim() || null,
-      };
-
-      set((state) => {
-        const nextMessages = replaceMessageId(state.messages, sourceUserMessage!.id, persistedUserMessageId);
-        return {
-          messages: [
-            ...nextMessages,
-            assistantMessage,
-          ],
-          streamingMessage: "",
-          streamingReasoning: "",
-          streamingThinkingTopic: "",
-          streamFailure: null,
-        };
-      });
-
-      await get().refreshUsage();
-      await get().refreshSessionUsage(sessionId);
-      if (streamResult.warning) {
-        get().pushToast(streamResult.warning, "info");
-      }
-    } catch (error) {
-      persistInflightStream(sessionId, null);
-      get().pushToast(`Failed to regenerate message: ${getErrorMessage(error)}`, "error");
-      set({ streamingMessage: "", streamingReasoning: "", streamingThinkingTopic: "", streamFailure: null, streamRecovery: null });
-      throw error;
-    } finally {
-      set({ sendingMessage: false });
-    }
-  },
-
-  reconnectStream: async () => {
-    if (get().previewMode) {
-      return;
-    }
-    const recovery = get().streamRecovery;
-    const currentSessionId = get().sessionId;
-    if (!recovery || recovery.mode !== "disconnected" || !currentSessionId || recovery.session_id !== currentSessionId || !recovery.job_id) {
-      return;
-    }
-    const currentContent = get().streamingMessage;
-    const currentReasoning = get().streamingReasoning;
-    set({
-      sendingMessage: true,
-      streamRecovery: { ...recovery, mode: "reconnecting", last_error: null },
-      streamFailure: null,
-    });
-    try {
-      const resumeCursor = normalizeCursorSequence(recovery.cursor);
-      const cursorToUse = (currentContent || currentReasoning) ? resumeCursor.cursor : "";
-      const streamResult = await consumeChatStream(
-        get().token,
-        recovery.session_id,
-        recovery.job_id,
-        cursorToUse,
-        get().logLevel,
-        (nextContent) => {
-          if (get().sessionId === recovery.session_id) set({ streamingMessage: nextContent });
-        },
-        (nextReasoning) => {
-          if (get().sessionId === recovery.session_id) set({ streamingReasoning: nextReasoning, streamingThinkingTopic: extractLastThinkingTopic(nextReasoning) });
-        },
-        currentContent,
-        currentReasoning,
-      );
-      const persistedUserMessageId = streamResult.userMessageId ?? recovery.user_message_id;
-      if (streamResult.failure) {
-        persistInflightStream(recovery.session_id, null);
-        set({
-          messages: get().messages,
-          streamingMessage: streamResult.content,
-          streamingReasoning: streamResult.reasoning,
-          streamRecovery: null,
-          streamFailure: buildStreamFailureState(
-            recovery.session_id,
-            recovery.job_id,
-            persistedUserMessageId,
-            recovery.user_message_created_at ?? resolveRecoveryUserMessageCreatedAt(get().messages, persistedUserMessageId),
-            streamResult.failure,
-            streamResult.content,
-            streamResult.reasoning,
-          ),
-        });
-        await get().refreshSessions();
-        await get().refreshSessionUsage(recovery.session_id);
-        return;
-      }
-      if (streamResult.warning) {
-        const latestCursor = normalizeCursorSequence(streamResult.cursor).cursor;
-        persistInflightStream(recovery.session_id, {
-          session_id: recovery.session_id,
-          job_id: recovery.job_id,
-          cursor: latestCursor,
-          user_message_id: persistedUserMessageId,
-          created_at: Date.now(),
-        });
-        set((state) => ({
-          streamRecovery: state.streamRecovery
-            ? {
-              ...state.streamRecovery,
-              cursor: latestCursor,
-              user_message_id: persistedUserMessageId,
-              mode: "disconnected",
-              last_error: "SSE disconnected again. You can reconnect or wait for completion.",
-              created_at: Date.now(),
-            }
-            : null,
-        }));
-        return;
-      }
-      persistInflightStream(recovery.session_id, null);
-      const refreshedMessages = await fetchSessionMessages(ensureToken(get().token), recovery.session_id);
-      set({
-        messages: refreshedMessages,
-        streamingMessage: "",
-        streamingReasoning: "",
-        streamingThinkingTopic: "",
-        streamRecovery: null,
-        streamFailure: null,
-      });
-      await get().refreshSessions();
-      await get().refreshSessionUsage(recovery.session_id);
-    } catch (error) {
-      set((state) => ({
-        streamRecovery: state.streamRecovery
-          ? {
-              ...state.streamRecovery,
-              mode: "disconnected",
-              last_error: `Failed to reconnect: ${getErrorMessage(error)}`,
-              created_at: Date.now(),
-            }
-          : null,
-      }));
-      get().pushToast(`Failed to reconnect stream: ${getErrorMessage(error)}`, "error");
-    } finally {
-      set({ sendingMessage: false });
-    }
-  },
-
-  waitForStreamCompletion: async () => {
-    if (get().previewMode) {
-      return;
-    }
-    const recovery = get().streamRecovery;
-    const currentSessionId = get().sessionId;
-    if (!recovery || recovery.mode !== "disconnected" || !currentSessionId || recovery.session_id !== currentSessionId) {
-      return;
-    }
-    set({
-      sendingMessage: true,
-      streamRecovery: { ...recovery, mode: "waiting", last_error: null },
-      streamingMessage: "",
-      streamingReasoning: "",
-      streamingThinkingTopic: "",
-      streamFailure: null,
-    });
-    try {
-      const token = ensureToken(get().token);
-      const userMessageCreatedAt =
-        recovery.user_message_created_at
-        ?? resolveRecoveryUserMessageCreatedAt(get().messages, recovery.user_message_id)
-        ?? Date.now();
-      await waitForAssistantMessage(token, recovery.session_id, userMessageCreatedAt, get().logLevel);
-      persistInflightStream(recovery.session_id, null);
-      const refreshedMessages = await fetchSessionMessages(token, recovery.session_id);
-      set({
-        messages: refreshedMessages,
-        streamingMessage: "",
-        streamingReasoning: "",
-        streamingThinkingTopic: "",
-        streamFailure: null,
-        streamRecovery: null,
-      });
-      await get().refreshSessions();
-      await get().refreshSessionUsage(recovery.session_id);
-    } catch (error) {
-      set((state) => ({
-        streamRecovery: state.streamRecovery
-          ? {
-            ...state.streamRecovery,
-            mode: "disconnected",
-            last_error: getErrorMessage(error),
-            created_at: Date.now(),
-          }
-          : null,
-      }));
-      throw error;
-    } finally {
-      set({ sendingMessage: false });
-    }
-  },
-
-  refreshProfile: async () => {
-    if (get().previewMode) {
-      return; // Profile already set from mock data
-    }
-    const token = ensureToken(get().token);
-    const data = await requestJson<{ profile: UserProfile }>("/api/profile", { method: "GET", token });
-    set({ profile: data.profile });
-  },
-
-  updateProfile: async (payload) => {
-    if (get().previewMode) {
-      set((state) => ({ profile: state.profile ? { ...state.profile, ...payload } : null }));
-      return;
-    }
-    const token = ensureToken(get().token);
-    const data = await requestJson<{ profile: UserProfile }>("/api/profile", {
-      method: "PUT",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    set({ profile: data.profile });
-  },
-
-  uploadAvatar: async (file) => {
-    if (get().previewMode) {
-      get().pushToast("Avatar upload is not available in preview mode.", "error");
-      throw new Error("Not available in preview mode.");
-    }
-    const token = ensureToken(get().token);
-    const squareAvatar = await cropImageToSquare(file);
-    const mimeType = squareAvatar.type || "application/octet-stream";
-    const session = await requestJson<{ session_id: string; upload_url: string; object_key: string }>(
-      "/api/upload-sessions",
-      {
-        method: "POST",
-        token,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          intended_type: "avatar",
-          file_name: squareAvatar.name,
-          mime_type: mimeType,
-          size: squareAvatar.size,
-        }),
-      },
-    );
-
-    const upload = await uploadFileWithRetry(session.upload_url, squareAvatar, mimeType, token);
-    if (!upload.ok) {
-      await cancelUploadSession(session.session_id, token);
-      throw new Error(`Avatar upload failed: ${upload.statusText}`);
-    }
-
-    const confirm = await requestJson<{ id: string }>(
-      `/api/upload-sessions/${session.session_id}/confirm`,
-      { method: "POST", token },
-    );
-    await get().updateProfile({ avatar_key: confirm.id });
-    get().pushToast("Avatar updated.", "success");
-  },
-
-  refreshAiProviders: async () => {
-    if (get().previewMode) return;
-    const token = ensureToken(get().token);
-    set({ aiProvidersLoading: true });
-    try {
-      const data = await requestJson<{ providers: AiProvider[]; encryption_key_ready: boolean }>("/api/settings/ai-providers", { method: "GET", token });
-      set({ aiProviders: data.providers, encryptionKeyReady: data.encryption_key_ready });
-    } finally {
-      set({ aiProvidersLoading: false });
-    }
-  },
-
-  createAiProvider: async (payload) => {
-    const token = ensureToken(get().token);
-    await requestJson("/api/settings/ai-providers", {
-      method: "POST",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    await get().refreshAiProviders();
-    get().pushToast("AI Provider created.", "success");
-  },
-
-  updateAiProvider: async (id, payload) => {
-    const token = ensureToken(get().token);
-    await requestJson(`/api/settings/ai-providers/${encodeURIComponent(id)}`, {
-      method: "PUT",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    await get().refreshAiProviders();
-    get().pushToast("AI Provider updated.", "success");
-  },
-
-  deleteAiProvider: async (id) => {
-    const token = ensureToken(get().token);
-    await requestJson(`/api/settings/ai-providers/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-      token,
-    });
-    await get().refreshAiProviders();
-    get().pushToast("AI Provider deleted.", "success");
-  },
-
-  refreshAiModels: async () => {
-    if (get().previewMode) return;
-    const token = ensureToken(get().token);
-    set({ aiModelsLoading: true });
-    try {
-      const data = await requestJson<{ models: AiModel[] }>("/api/settings/ai-models", { method: "GET", token });
-      set({ aiModels: data.models });
-    } finally {
-      set({ aiModelsLoading: false });
-    }
-  },
-
-  createAiModel: async (payload) => {
-    const token = ensureToken(get().token);
-    await requestJson("/api/settings/ai-models", {
-      method: "POST",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    await get().refreshAiModels();
-    await get().refreshModels();
-    get().pushToast("AI Model added.", "success");
-  },
-
-  updateAiModel: async (id, payload) => {
-    const token = ensureToken(get().token);
-    await requestJson(`/api/settings/ai-models/${encodeURIComponent(id)}`, {
-      method: "PUT",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    await get().refreshAiModels();
-    await get().refreshModels();
-    get().pushToast("AI Model updated.", "success");
-  },
-
-  deleteAiModel: async (id) => {
-    const token = ensureToken(get().token);
-    await requestJson(`/api/settings/ai-models/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-      token,
-    });
-    await get().refreshAiModels();
-    await get().refreshModels();
-    get().pushToast("AI Model deleted.", "success");
-  },
-
-  fetchUpstreamModels: async () => {
-    const token = ensureToken(get().token);
-    return requestJson("/api/settings/ai-models/upstream", { method: "GET", token });
-  },
-
-  refreshAdminUsers: async () => {
-    if (get().previewMode) return;
-    const token = ensureToken(get().token);
-    set({ adminUsersLoading: true });
-    try {
-      const data = await requestJson<{ users: AdminUser[] }>("/api/admin/users", { method: "GET", token });
-      set({ adminUsers: data.users });
-    } finally {
-      set({ adminUsersLoading: false });
-    }
-  },
-
-  updateUserPermissions: async (userId, payload) => {
-    const token = ensureToken(get().token);
-    await requestJson(`/api/admin/users/${encodeURIComponent(userId)}/permissions`, {
-      method: "PUT",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    await get().refreshAdminUsers();
-    get().pushToast("User permissions updated.", "success");
-  },
-
-  updateUserBudget: async (userId, payload) => {
-    const token = ensureToken(get().token);
-    await requestJson(`/api/admin/users/${encodeURIComponent(userId)}/budget`, {
-      method: "PUT",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    await get().refreshAdminUsers();
-    get().pushToast("User budget updated.", "success");
-  },
-
-  refreshUsage: async () => {
-    if (get().previewMode) {
-      return; // Usage already set from mock data
-    }
-    const token = ensureToken(get().token);
-    const dateUtc = getCurrentUtcDate();
-    const [allData, dailyData] = await Promise.allSettled([
-      requestJson<{ summary: UsageSummary; limits?: UserLimitsStatus }>("/api/stats/usage", {
-        method: "GET",
-        token,
-      }),
-      requestJson<{ summary: UsageSummary; limits?: UserLimitsStatus }>(`/api/stats/usage?date_utc=${encodeURIComponent(dateUtc)}`, {
-        method: "GET",
-        token,
-      }),
-    ]);
-    const next: {
-      usage?: UsageSummary;
-      dailyUsage?: UsageSummary | null;
-      dailyUsageDate?: string | null;
-      userLimits?: UserLimitsStatus | null;
-    } = {};
-
-    let hasSuccess = false;
-    if (allData.status === "fulfilled") {
-      next.usage = allData.value.summary;
-      if (allData.value.limits) {
-        next.userLimits = allData.value.limits;
-      }
-      hasSuccess = true;
-    }
-    if (dailyData.status === "fulfilled") {
-      next.dailyUsage = dailyData.value.summary;
-      next.dailyUsageDate = dateUtc;
-      if (dailyData.value.limits) {
-        next.userLimits = dailyData.value.limits;
-      }
-      hasSuccess = true;
-    } else {
-      next.dailyUsage = null;
-      next.dailyUsageDate = dateUtc;
-    }
-
-    if (hasSuccess) {
-      set(next);
-      return;
-    }
-
-    console.error("Failed to refresh usage summaries", {
-      all_error: allData.status === "rejected" ? allData.reason : null,
-      daily_error: dailyData.status === "rejected" ? dailyData.reason : null,
-    });
-  },
-
-  syncUsageAggregate: async () => {
-    if (get().previewMode) {
-      return;
-    }
-    const token = ensureToken(get().token);
-    try {
-      const data = await requestJson<{ profile: UserProfile }>("/api/settings/usage/sync", {
-        method: "PUT",
-        token,
-      });
-      set({ profile: data.profile });
-      await get().refreshUsage();
-      get().pushToast("Usage statistics recalculated and synchronized.", "success");
-    } catch (error) {
-      get().pushToast(`Sync failed: ${getErrorMessage(error)}`, "error");
-    }
-  },
-
-  refreshSessionUsage: async (sessionId) => {
-    if (get().previewMode) {
-      return; // Session usage is managed locally in preview mode
-    }
-    const activeSessionId = sessionId ?? get().sessionId;
-    if (!activeSessionId) {
-      set({ sessionUsage: ZERO_SESSION_USAGE });
-      return;
-    }
-
-    const token = ensureToken(get().token);
-    const data = await requestJson<{ summary: UsageSummary }>(
-      `/api/stats/usage?session_id=${encodeURIComponent(activeSessionId)}`,
-      {
-        method: "GET",
-        token,
-      },
-    );
-    set({
-      sessionUsage: {
-        total_tokens: Number(data.summary?.total_tokens ?? 0),
-        total_cost_usd: Number(data.summary?.total_cost_usd ?? 0),
-      },
-    });
-  },
-
-  refreshModels: async () => {
-    if (get().previewMode) {
-      return; // Models already set from mock data
-    }
-    const token = ensureToken(get().token);
-    const data = await requestJson<{
-      models: ModelOption[];
-      selected_model: string;
-      title_model: string;
-        chat_settings?: Partial<ChatGenerationSettings>;
-        log_level?: LogLevel;
-        system_prompt_timezone?: string;
-        show_archived_sessions?: boolean;
-        active_workspace_id?: string;
-        api_call_mode?: "sdk" | "fetch";
-        backend_build_hash?: string;
-        backend_build_time?: string;
-        instance_id?: string;
-        schema_version?: number | string;
-      }>("/api/models", { method: "GET", token });
-    set({
-      models: data.models || [],
-      selectedModel: data.selected_model || DEFAULT_MODEL,
-      titleModel: data.title_model || data.selected_model || DEFAULT_MODEL,
-      chatSettings: normalizeChatSettings(data.chat_settings),
-      logLevel: normalizeLogLevel(data.log_level),
-      systemPromptTimezone:
-        typeof data.system_prompt_timezone === "string" && data.system_prompt_timezone.trim() ? data.system_prompt_timezone : "UTC",
-      showArchivedSessions: Boolean(data.show_archived_sessions),
-      apiCallMode: data.api_call_mode || "fetch",
-      activeWorkspaceId:
-        typeof data.active_workspace_id === "string" && data.active_workspace_id.trim() ? data.active_workspace_id : get().activeWorkspaceId,
-      backendBuildHash: typeof data.backend_build_hash === "string" && data.backend_build_hash.trim()
-        ? data.backend_build_hash.trim()
-        : get().backendBuildHash,
-      backendBuildTime: typeof data.backend_build_time === "string" ? data.backend_build_time.trim() : get().backendBuildTime,
-      instanceId: data.instance_id || get().instanceId,
-      schemaVersion: Number(data.schema_version) || get().schemaVersion,
-    });
-  },
-
-  setSelectedModel: async (model) => {
-    const trimmed = model.trim();
-    if (!trimmed) {
-      throw new Error("Model is required.");
-    }
-    if (get().previewMode) {
-      set({ selectedModel: trimmed });
-      return;
-    }
-    const token = ensureToken(get().token);
-    const data = await requestJson<{ selected_model: string }>("/api/settings/model", {
-      method: "PUT",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: trimmed }),
-    });
-    set({ selectedModel: data.selected_model });
-  },
-
-  setTitleModel: async (model) => {
-    const trimmed = model.trim();
-    if (!trimmed) {
-      throw new Error("Model is required.");
-    }
-    if (get().previewMode) {
-      set({ titleModel: trimmed });
-      return;
-    }
-    const token = ensureToken(get().token);
-    const data = await requestJson<{ title_model: string }>("/api/settings/title-model", {
-      method: "PUT",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: trimmed }),
-    });
-    set({ titleModel: data.title_model });
-  },
-
-  setChatSettings: async (payload) => {
-    if (get().previewMode) {
-      set((state) => ({ chatSettings: normalizeChatSettings({ ...state.chatSettings, ...payload }) }));
-      return;
-    }
-    const token = ensureToken(get().token);
-    const data = await requestJson<{ chat_settings: ChatGenerationSettings }>("/api/settings/chat", {
-      method: "PUT",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    set({ chatSettings: normalizeChatSettings(data.chat_settings) });
-  },
-
-  setLogLevel: async (level) => {
-    if (get().previewMode) {
-      set({ logLevel: normalizeLogLevel(level) });
-      return;
-    }
-    const token = ensureToken(get().token);
-    const data = await requestJson<{ log_level: LogLevel }>("/api/settings/log-level", {
-      method: "PUT",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ log_level: level }),
-    });
-    set({ logLevel: normalizeLogLevel(data.log_level) });
-  },
-
-  setSystemPromptTimezone: async (timezone) => {
-    const trimmed = timezone.trim();
-    if (!trimmed) {
-      throw new Error("Timezone is required.");
-    }
-    if (get().previewMode) {
-      set({ systemPromptTimezone: trimmed });
-      return;
-    }
-    const token = ensureToken(get().token);
-    const data = await requestJson<{ system_prompt_timezone: string }>("/api/settings/system-prompt-timezone", {
-      method: "PUT",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ timezone: trimmed }),
-    });
-    set({ systemPromptTimezone: data.system_prompt_timezone });
-  },
-
-  setShowArchivedSessions: async (show) => {
-    if (get().previewMode) {
-      set({ showArchivedSessions: show });
-      return;
-    }
-    const token = ensureToken(get().token);
-    const data = await requestJson<{ show_archived_sessions: boolean }>("/api/settings/show-archived-sessions", {
-      method: "PUT",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ show_archived_sessions: show }),
-    });
-    set({ showArchivedSessions: Boolean(data.show_archived_sessions) });
-    await get().refreshSessions();
-  },
-
-  setApiCallMode: async (mode) => {
-    if (get().previewMode) {
-      set({ apiCallMode: mode });
-      return;
-    }
-    const token = ensureToken(get().token);
-    const data = await requestJson<{ api_call_mode: "sdk" | "fetch" }>("/api/settings/api-call-mode", {
-      method: "PUT",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ api_call_mode: mode }),
-    });
-    set({ apiCallMode: data.api_call_mode });
-    get().pushToast(`AI API calling mode switched to ${mode === "sdk" ? "Vercel AI SDK" : "Standard"}.`, "success");
-  },
-
-  refreshWorkspaces: async (includeArchived = true) => {
-    if (get().previewMode) {
-      return;
-    }
-    const token = ensureToken(get().token);
-    const includeArchivedFlag = includeArchived ? "1" : "0";
-    const data = await requestJson<{ workspaces: Workspace[]; active_workspace_id: string }>(
-      `/api/workspaces?include_archived=${includeArchivedFlag}`,
-      {
-        method: "GET",
-        token,
-      },
-    );
-    set({
-      workspaces: data.workspaces ?? [],
-      activeWorkspaceId: data.active_workspace_id || null,
-    });
-  },
-
-  createWorkspace: async (name) => {
-    const normalizedName = name.trim();
-    if (!normalizedName) {
-      throw new Error("Workspace name is required.");
-    }
-    if (get().previewMode) {
-      const now = Date.now();
-      const id = crypto.randomUUID();
-      set((state) => ({
-        workspaces: [{ id, name: normalizedName, archived_at: null, created_at: now, updated_at: now }, ...state.workspaces],
-      }));
-      return;
-    }
-    const token = ensureToken(get().token);
-    await requestJson<{ workspace: Workspace }>("/api/workspaces", {
-      method: "POST",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: normalizedName }),
-    });
-    await get().refreshWorkspaces(true);
-  },
-
-  renameWorkspace: async (workspaceId, name) => {
-    const normalizedName = name.trim();
-    if (!workspaceId.trim()) {
-      throw new Error("Workspace id is required.");
-    }
-    if (!normalizedName) {
-      throw new Error("Workspace name is required.");
-    }
-    if (get().previewMode) {
-      set((state) => ({
-        workspaces: state.workspaces.map((workspace) =>
-          workspace.id === workspaceId ? { ...workspace, name: normalizedName, updated_at: Date.now() } : workspace,
-        ),
-      }));
-      return;
-    }
-    const token = ensureToken(get().token);
-    await requestJson<{ success: boolean }>(`/api/workspaces/${encodeURIComponent(workspaceId)}`, {
-      method: "PUT",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: normalizedName }),
-    });
-    await get().refreshWorkspaces(true);
-  },
-
-  archiveWorkspace: async (workspaceId, archived = true) => {
-    if (!workspaceId.trim()) {
-      throw new Error("Workspace id is required.");
-    }
-    if (get().previewMode) {
-      set((state) => ({
-        workspaces: state.workspaces.map((workspace) =>
-          workspace.id === workspaceId ? { ...workspace, archived_at: archived ? Date.now() : null, updated_at: Date.now() } : workspace,
-        ),
-      }));
-      return;
-    }
-    const token = ensureToken(get().token);
-    await requestJson<{ success: boolean }>(`/api/workspaces/${encodeURIComponent(workspaceId)}/archive`, {
-      method: "PUT",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ archived }),
-    });
-    await get().refreshWorkspaces(true);
-    await get().refreshSessions();
-  },
-
-  activateWorkspace: async (workspaceId) => {
-    if (!workspaceId.trim()) {
-      throw new Error("Workspace id is required.");
-    }
-    if (get().previewMode) {
-      set({
-        activeWorkspaceId: workspaceId,
-        sessions: [],
-        sessionId: null,
-        messages: [],
-        sessionUsage: ZERO_SESSION_USAGE,
-      });
-      return;
-    }
-    const token = ensureToken(get().token);
-    await requestJson<{ success: boolean; active_workspace_id: string }>(
-      `/api/workspaces/${encodeURIComponent(workspaceId)}/activate`,
-      {
-        method: "PUT",
-        token,
-      },
-    );
-    get().clearSession();
-    await get().refreshWorkspaces(true);
-    await get().refreshSessions();
-  },
-
-  renameSession: async (sessionId, title) => {
-    const normalizedTitle = title.trim();
-    if (!normalizedTitle) {
-      throw new Error("Title is required.");
-    }
-    if (get().previewMode) {
-      set((state) => ({
-        sessions: state.sessions.map((s) => (s.id === sessionId ? { ...s, title: normalizedTitle } : s)),
-      }));
-      return;
-    }
-    const token = ensureToken(get().token);
-    const data = await requestJson<{ success: boolean; title: string }>(`/api/sessions/${encodeURIComponent(sessionId)}/title`, {
-      method: "PUT",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: normalizedTitle }),
-    });
-    set((state) => ({
-      sessions: state.sessions.map((s) => (s.id === sessionId ? { ...s, title: data.title || normalizedTitle } : s)),
-    }));
-  },
-
-  autoGenerateSessionTitle: async (sessionId) => {
-    if (!sessionId.trim()) {
-      throw new Error("Session id is required.");
-    }
-    if (get().previewMode) {
-      const transcript = get().messages
-        .filter((message) => message.session_id === sessionId && (message.role === "user" || message.role === "assistant"))
-        .map((message) => message.content.trim())
-        .filter((content) => content.length > 0)
-        .join("\n\n");
-      const title = transcript ? transcript.slice(0, SESSION_TITLE_MAX_LENGTH) : "New Chat";
-      set((state) => ({
-        sessions: state.sessions.map((s) => (s.id === sessionId ? { ...s, title } : s)),
-      }));
-      return;
-    }
-    const token = ensureToken(get().token);
-    const data = await requestJson<{ success: boolean; title: string }>(`/api/sessions/${encodeURIComponent(sessionId)}/title/auto`, {
-      method: "POST",
-      token,
-    });
-    set((state) => ({
-      sessions: state.sessions.map((s) => (s.id === sessionId ? { ...s, title: data.title || s.title } : s)),
-    }));
-    if (get().sessionId === sessionId) {
-      await get().refreshUsage();
-      await get().refreshSessionUsage(sessionId);
-    }
-  },
-
-  archiveSession: async (sessionId, archived = true) => {
-    if (get().previewMode) {
-      const showArchived = get().showArchivedSessions;
-      set((state) => ({
-        sessions: state.sessions
-          .map((s) => (s.id === sessionId ? { ...s, archived_at: archived ? Date.now() : null } : s))
-          .filter((s) => showArchived || !s.archived_at),
-      }));
-      if (archived && !showArchived && get().sessionId === sessionId) {
-        get().clearSession();
-      }
-      return;
-    }
-    const token = ensureToken(get().token);
-    await requestJson<{ success: boolean }>(`/api/sessions/${encodeURIComponent(sessionId)}/archive`, {
-      method: "PUT",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ archived }),
-    });
-    if (archived && !get().showArchivedSessions && get().sessionId === sessionId) {
-      get().clearSession();
-    }
-    await get().refreshSessions();
-  },
-
-  pinSession: async (sessionId, pinned = true) => {
-    if (get().previewMode) {
-      set((state) => ({
-        sessions: state.sessions.map((s) => (s.id === sessionId ? { ...s, pinned_at: pinned ? Date.now() : null } : s)),
-      }));
-      return;
-    }
-    const token = ensureToken(get().token);
-    await requestJson<{ success: boolean }>(`/api/sessions/${encodeURIComponent(sessionId)}/pin`, {
-      method: "PUT",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pinned }),
-    });
-    await get().refreshSessions();
-  },
-
-  refreshPasskeys: async () => {
-    if (get().previewMode) {
-      set({ passkeys: [] });
-      return;
-    }
-    try {
-      const token = ensureToken(get().token);
-      const data = await requestJson<{ passkeys: PasskeyInfo[] }>("/api/auth/passkeys", { method: "GET", token });
-      set({ passkeys: data.passkeys || [] });
-    } catch (error) {
-      console.warn("Failed to refresh passkeys (it might be retired):", error);
-      set({ passkeys: [] });
-    }
-  },
-
-  registerPasskey: async (nickname) => {
-    if (get().previewMode) {
-      throw new Error("Passkey management is not available in preview mode.");
-    }
-    const token = ensureToken(get().token);
-    const begin = await requestJson<{ options: Parameters<typeof startRegistration>[0] }>(
-      "/api/auth/passkeys/register-options",
-      { method: "POST", token },
-    );
-
-    const passkeyResponse = await startRegistration(begin.options);
-    await requestJson<{ success: boolean }>("/api/auth/passkeys/register-verify", {
-      method: "POST",
-      token,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        response: passkeyResponse,
-        nickname: nickname?.trim() || undefined,
-      }),
-    });
-
-    await get().refreshPasskeys();
-    get().pushToast("Passkey registered.", "success");
-  },
-
-  removePasskey: async (credentialId) => {
-    if (get().previewMode) {
-      throw new Error("Passkey management is not available in preview mode.");
-    }
-    const token = ensureToken(get().token);
-    await requestJson<{ success: boolean }>(`/api/auth/passkeys/${encodeURIComponent(credentialId)}`, {
-      method: "DELETE",
-      token,
-    });
-    await get().refreshPasskeys();
-    get().pushToast("Passkey removed.", "success");
-  },
-
-  refreshAttachmentLibrary: async () => {
-    if (get().previewMode) {
-      set({ attachmentLibrary: [], attachmentLibraryLoading: false });
-      return;
-    }
-    const token = ensureToken(get().token);
-    set({ attachmentLibraryLoading: true });
-    try {
-      const data = await requestJson<{
-        attachments: Array<{
-          id: string;
-          file_name: string;
-          mime_type: string;
-          size: number;
-          access_url: string;
-          created_at: number;
-          type?: MessageAttachmentType;
-        }>;
-      }>("/api/attachments", { method: "GET", token });
-      const items: AttachmentLibraryItem[] = (data.attachments ?? []).map((item) => ({
-        id: item.id,
-        file_name: item.file_name,
-        mime_type: item.mime_type,
-        size: Number(item.size) || 0,
-        url: item.access_url,
-        type: item.type ?? resolveAttachmentType(item.mime_type || "application/octet-stream"),
-        created_at: Number(item.created_at) || 0,
-      }));
-      set({ attachmentLibrary: items });
-    } finally {
-      set({ attachmentLibraryLoading: false });
-    }
-  },
-
-  deleteAttachment: async (attachmentId) => {
-    if (get().previewMode) {
-      throw new Error("Attachment library is not available in preview mode.");
-    }
-    const token = ensureToken(get().token);
-    await requestJson<{ success: boolean }>(`/api/attachments/${encodeURIComponent(attachmentId)}`, {
-      method: "DELETE",
-      token,
-    });
-    set((state) => ({
-      attachmentLibrary: state.attachmentLibrary.filter((item) => item.id !== attachmentId),
-      messages: state.messages.map((message) => ({
-        ...message,
-        attachments: (message.attachments ?? []).filter((attachment) => attachment.id !== attachmentId),
-      })),
-    }));
-  },
-
-  refreshLibrary: async () => {
-    if (get().previewMode) {
-      set({ libraryItems: [], libraryLoading: false });
-      return;
-    }
-    const token = ensureToken(get().token);
-    set({ libraryLoading: true });
-    try {
-      const pageSize = 100;
-      const dedup = new Map<string, LibraryItem>();
-      let cursor: string | null = null;
-
-      while (true) {
-        const params = new URLSearchParams({ limit: String(pageSize) });
-        if (cursor) {
-          params.set("cursor", cursor);
-        }
-        const data = await requestJson<{
-          files: Array<{
-            id: string;
-            file_name: string;
-            mime_type: string;
-            size: number;
-            access_url: string;
-            created_at: number;
-            type?: MessageAttachmentType;
-          }>;
-          pagination?: {
-            next_cursor?: string | null;
-          };
-        }>(`/api/library?${params.toString()}`, { method: "GET", token });
-
-        for (const item of data.files ?? []) {
-          dedup.set(item.id, {
-            id: item.id,
-            file_name: item.file_name,
-            mime_type: item.mime_type,
-            size: Number(item.size) || 0,
-            url: item.access_url,
-            type: item.type ?? resolveAttachmentType(item.mime_type || "application/octet-stream"),
-            created_at: Number(item.created_at) || 0,
-          });
-        }
-
-        const nextCursor = data.pagination?.next_cursor?.trim() || null;
-        if (!nextCursor || nextCursor === cursor) {
-          break;
-        }
-        cursor = nextCursor;
-      }
-      const items = Array.from(dedup.values());
-      set({ libraryItems: items });
-    } finally {
-      set({ libraryLoading: false });
-    }
-  },
-
-  uploadLibraryFile: async (file) => {
-    if (get().previewMode) {
-      throw new Error("Library is not available in preview mode.");
-    }
-    const token = ensureToken(get().token);
-    const processedFile = await convertImageToSdrIfPossible(file);
-    const mimeType = processedFile.type || file.type || "application/octet-stream";
-
-    const session = await requestJson<{ session_id: string; upload_url: string; object_key: string }>(
-      "/api/upload-sessions",
-      {
-        method: "POST",
-        token,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          intended_type: "library",
-          file_name: processedFile.name,
-          mime_type: mimeType,
-          size: processedFile.size,
-        }),
-      },
-    );
-
-    const upload = await uploadFileWithRetry(session.upload_url, processedFile, mimeType, token);
-    if (!upload.ok) {
-      await cancelUploadSession(session.session_id, token);
-      throw new Error(`Library upload failed: ${await parseApiError(upload)}`);
-    }
-
-    const metadata = await requestJson<{ id: string; access_url: string }>(
-      `/api/upload-sessions/${session.session_id}/confirm`,
-      { method: "POST", token },
-    );
-
-    if (!metadata.access_url || !metadata.id) {
-      throw new Error("Library file URL is missing.");
-    }
-    return {
-      id: metadata.id,
-      file_name: processedFile.name,
-      mime_type: mimeType,
-      size: processedFile.size,
-      url: metadata.access_url,
-      type: resolveAttachmentType(mimeType),
-      created_at: Date.now(),
-    };
-  },
-
-  deleteLibraryItem: async (fileId) => {
-    if (get().previewMode) {
-      throw new Error("Library is not available in preview mode.");
-    }
-    const token = ensureToken(get().token);
-    await requestJson<{ success: boolean }>(`/api/library/${encodeURIComponent(fileId)}`, {
-      method: "DELETE",
-      token,
-    });
-    set((state) => ({
-      libraryItems: state.libraryItems.filter((item) => item.id !== fileId),
-      messages: state.messages.map((message) => ({
-        ...message,
-        attachments: (message.attachments ?? []).filter((attachment) => attachment.id !== fileId),
-      })),
-    }));
-  },
-
-  uploadAttachment: async (file, onProgress) => {
-    if (get().previewMode) {
-      throw new Error("File attachments are not available in preview mode.");
-    }
-    const token = ensureToken(get().token);
-    const processedFile = await convertImageToSdrIfPossible(file);
-    const mimeType = processedFile.type || file.type || "application/octet-stream";
-
-    onProgress?.(0);
-
-    const session = await requestJson<{ session_id: string; upload_url: string; object_key: string }>(
-      "/api/upload-sessions",
-      {
-        method: "POST",
-        token,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          intended_type: "attachment",
-          file_name: processedFile.name,
-          mime_type: mimeType,
-          size: processedFile.size,
-          conversation_id: get().sessionId ?? "draft",
-        }),
-      },
-    );
-
-    const upload = await uploadFileWithRetry(session.upload_url, processedFile, mimeType, token, onProgress);
-    if (!upload.ok) {
-      await cancelUploadSession(session.session_id, token);
-      throw new Error(`Attachment upload failed: ${await parseApiError(upload)}`);
-    }
-
-    onProgress?.(100);
-    const metadata = await requestJson<{ id: string; access_url: string }>(
-      `/api/upload-sessions/${session.session_id}/confirm`,
-      { method: "POST", token },
-    );
-    if (!metadata.access_url || !metadata.id) {
-      throw new Error("Attachment URL is missing.");
-    }
-    return {
-      id: metadata.id,
-      file_name: processedFile.name,
-      mime_type: mimeType,
-      size: processedFile.size,
-      url: metadata.access_url,
-      type: resolveAttachmentType(mimeType),
-    };
-  },
+  ...createAuthSlice(set, get, store),
+  ...createChatSlice(set, get, store),
+  ...createWorkspaceSlice(set, get, store),
+  ...createAdminSlice(set, get, store),
+  ...createSettingsSlice(set, get, store),
 }));

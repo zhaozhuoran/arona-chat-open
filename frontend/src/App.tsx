@@ -16,7 +16,8 @@ const AuthPanel = lazy(() => import("./components/AuthPanel").then(m => ({ defau
 const LibraryPanel = lazy(() => import("./components/LibraryPanel").then(m => ({ default: m.LibraryPanel })));
 const SettingsPanel = lazy(() => import("./components/SettingsPanel").then(m => ({ default: m.SettingsPanel })));
 import { useAuth } from "@clerk/clerk-react";
-import { useStore, isPreviewAvailable } from "./store/useStore";
+import { useStore } from "./store/useStore";
+import { isPreviewAvailable, IS_CLERK_AVAILABLE, PREVIEW_PASSWORD } from "./config";
 
 type TransitionState = "idle" | "curtain";
 type MainStyle = CSSProperties & {
@@ -54,7 +55,6 @@ const parseChatRoute = (pathname: string): ChatRoute | null => {
   }
 };
 
-const IS_CLERK_AVAILABLE = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
 
 function App() {
   const [bootComplete, setBootComplete] = useState(false);
@@ -397,7 +397,7 @@ function App() {
 
   const handlePasswordLogin = useCallback(
     async (password: string) => {
-      const previewPassword = import.meta.env.VITE_PREVIEW_PASSWORD?.trim();
+      const previewPassword = PREVIEW_PASSWORD;
       if (previewPassword && password.trim() === previewPassword) {
         loginWithPreviewPassword();
         return;
@@ -564,9 +564,11 @@ function App() {
   }, [sessionId]);
 
   useEffect(() => {
-    document.body.classList.remove("theme-standard", "theme-ethereal-light");
+    document.body.classList.remove("theme-standard", "theme-ethereal-light", "theme-ethereal-dark");
     document.body.classList.add(`theme-${theme}`);
   }, [theme]);
+
+  const isEthereal = theme?.startsWith("ethereal-");
 
   const fadeStart = 40;
   const fadeEnd = 80;
@@ -575,17 +577,17 @@ function App() {
   const topbarCollapse = hasConversationStarted ? clamp01(chatScrollY / fadeEnd) : 0;
   const topbarHidden = topbarCollapse >= TOPBAR_INTERACTION_HIDE_THRESHOLD;
   const mainStyle: MainStyle = {
-    "--ba-topbar-collapse": theme === "ethereal-light" ? 0 : topbarCollapse,
+    "--ba-topbar-collapse": isEthereal ? 0 : topbarCollapse,
   };
   const topbarStyle = {
-    pointerEvents: (theme !== "ethereal-light" && topbarHidden) ? "none" : "auto",
-    visibility: (theme !== "ethereal-light" && topbarHidden) ? "hidden" : "visible",
+    pointerEvents: (!isEthereal && topbarHidden) ? "none" : "auto",
+    visibility: (!isEthereal && topbarHidden) ? "hidden" : "visible",
   } as CSSProperties;
 
   const topbarTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (theme !== "ethereal-light") {
+    if (!isEthereal) {
       if (topbarTimerRef.current !== null) {
         window.clearTimeout(topbarTimerRef.current);
         topbarTimerRef.current = null;
@@ -788,7 +790,7 @@ function App() {
   }
 
   const renderSidebar = () => {
-    const isEthereal = theme === "ethereal-light";
+    const isEthereal = theme?.startsWith("ethereal-");
     return (
       <aside className={`ba-sidebar ${sidebarOpen ? "is-open" : ""} ${isEthereal ? "ethereal" : ""}`}>
         <header className="ba-sidebar-header">
@@ -1005,8 +1007,8 @@ function App() {
 
       {renderSidebar()}
 
-      <main className={`ba-main ${theme === "ethereal-light" ? "ethereal" : ""}`} style={mainStyle}>
-        {theme === "ethereal-light" ? (
+      <main className={`ba-main ${isEthereal ? "ethereal" : ""}`} style={mainStyle}>
+        {isEthereal ? (
           <>
             <button
               type="button"
@@ -1053,7 +1055,7 @@ function App() {
 
         <Suspense fallback={<div className="ba-chat-shell-loading" />}>
           <section className={`ba-chat-shell ${sidebarOpen ? "is-sidebar-open" : ""}`}>
-            {theme === "ethereal-light" && (
+            {isEthereal && (
               <div className={`ba-topbar-floating-container absolute top-6 left-0 right-0 z-[25] flex justify-center transition-all duration-300 ${(topbarVisible || sessionInfoOpen) ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"}`}>
                 <div className="relative" ref={modelSelectorRef}>
                   <div
@@ -1100,7 +1102,7 @@ function App() {
             <ChatInputArea />
           </section>
 
-          {theme !== "ethereal-light" && (
+          {!isEthereal && (
             <BottomDock
               onToggleSidebar={() => setSidebarOpen((current) => !current)}
               onNewSession={triggerNewSession}

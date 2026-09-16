@@ -231,7 +231,7 @@ export const ChatInputArea = () => {
     };
   }, []);
 
-  const isEthereal = theme === "ethereal-light";
+  const isEthereal = theme?.startsWith("ethereal-");
 
   return (
     <div className="ba-composer-shell">
@@ -405,7 +405,7 @@ export const ChatInputArea = () => {
             document.body,
           )
         : null}
-      {theme !== "ethereal-light" ? (
+      {!isEthereal ? (
         <p className="ba-composer-hint">
           {sendShortcut === "ctrl_enter" ? "Enter for newline, Ctrl/⌘ + Enter to send." : "Enter to send, Shift + Enter for newline."}
         </p>

@@ -1,6 +1,7 @@
 import { SignIn, SignUp, useAuth } from "@clerk/clerk-react";
 import { useState } from "react";
 import { Lock } from "lucide-react";
+import { IS_CLERK_AVAILABLE } from "../config";
 
 type AuthPanelProps = {
   loading: boolean;
@@ -10,7 +11,6 @@ type AuthPanelProps = {
 
 type ClerkMode = "signin" | "signup";
 
-const IS_CLERK_AVAILABLE = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
 
 const clerkAppearance = {
   variables: {

@@ -223,6 +223,7 @@ import {
 } from "./chat-stream";
 import { TOOLS, getAvailableTools } from "./tools";
 import { type UsageSummary } from "@arona-chat/shared";
+import { SessionRepository, MessageRepository, AttachmentRepository } from "./repositories";
 
 app.post("/api/chat/stream", async (c) => {
   const auth = await requireAuth(c);
@@ -262,32 +263,20 @@ app.post("/api/chat/stream", async (c) => {
   }
 
   const db = c.env.D1_DB;
+  const sessionRepo = new SessionRepository(db);
+  const messageRepo = new MessageRepository(db);
+  const attachmentRepo = new AttachmentRepository(db);
+
   const activeWorkspaceId = await getActiveWorkspaceId(db, auth.sub);
   const logLevel = c.get("logLevel") ?? DEFAULT_LOG_LEVEL;
-  let existingSession = await db
-    .prepare("SELECT id FROM sessions WHERE id = ? AND workspace_id = ? LIMIT 1")
-    .bind(sessionId, activeWorkspaceId)
-    .first<{ id: string }>();
+  let existingSession = await sessionRepo.findSessionById(sessionId, activeWorkspaceId);
   if (!existingSession?.id && (newSession || requestSource === "regenerate_message")) {
     const sessionTitle = "New Chat";
-    const insertSessionResult = await db
-      .prepare("INSERT OR IGNORE INTO sessions (id, title, created_at, workspace_id, user_id) VALUES (?, ?, ?, ?, ?)")
-      .bind(sessionId, sessionTitle, Date.now(), activeWorkspaceId, auth.sub)
-      .run();
+    const insertSessionResult = await sessionRepo.createSession(sessionId, sessionTitle, Date.now(), activeWorkspaceId, auth.sub);
     if (!insertSessionResult.success) {
       throw new Error("Failed to ensure session.");
     }
-    if (logLevel === "TRACE" && !insertSessionResult.meta.changes) {
-      logTrace("chat.session_ensure_skipped_existing", {
-        ...buildRequestLogPayload(c),
-        session_id: sessionId,
-        workspace_id: activeWorkspaceId,
-      });
-    }
-    existingSession = await db
-      .prepare("SELECT id FROM sessions WHERE id = ? AND workspace_id = ? LIMIT 1")
-      .bind(sessionId, activeWorkspaceId)
-      .first<{ id: string }>();
+    existingSession = await sessionRepo.findSessionById(sessionId, activeWorkspaceId);
     if (!existingSession?.id) {
       return c.json({ error: "Session id conflicts with another workspace." }, 409);
     }
@@ -299,10 +288,7 @@ app.post("/api/chat/stream", async (c) => {
   let effectiveRegenerateUserMessageId = regenerateUserMessageId;
   let shouldInsertUserMessage = !effectiveRegenerateUserMessageId;
   if (effectiveRegenerateUserMessageId) {
-    const existingUserMessage = await db
-      .prepare("SELECT id, content FROM messages WHERE id = ? AND session_id = ? AND role = 'user'")
-      .bind(effectiveRegenerateUserMessageId, sessionId)
-      .first<{ id: string; content: string | null }>();
+    const existingUserMessage = await messageRepo.findUserMessage(effectiveRegenerateUserMessageId, sessionId);
     if (!existingUserMessage) {
       const hasContentForNewUserMessage =
         requestSource === "regenerate_message" && (message.length > 0 || requestedAttachmentIds.length > 0);
@@ -400,10 +386,7 @@ app.post("/api/chat/stream", async (c) => {
   }
 
   if (shouldInsertUserMessage) {
-    await db
-      .prepare("INSERT INTO messages (id, session_id, role, content, model, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind(userMessageId, sessionId, "user", message, null, Date.now())
-      .run();
+    await messageRepo.createMessage(userMessageId, sessionId, "user", message, null, Date.now());
   }
 
   if (selectedAttachments.length > 0) {
@@ -412,13 +395,10 @@ app.post("/api/chat/stream", async (c) => {
         const attachmentConversationId = attachment.conversation_id?.trim() ?? "";
         if (attachmentConversationId !== sessionId) {
         // Re-bind same-user attachments to current session so hash-deduplicated files can be reused across conversations.
-          await db
-            .prepare("UPDATE attachments SET conversation_id = ? WHERE id = ? AND user_id = ?")
-            .bind(sessionId, attachment.id, auth.sub)
-            .run();
+          await attachmentRepo.updateAttachmentConversationId(sessionId, attachment.id, auth.sub);
         }
       }
-      await db.prepare("INSERT OR IGNORE INTO message_attachments (message_id, attachment_id) VALUES (?, ?)").bind(userMessageId, attachment.id).run();
+      await attachmentRepo.linkMessageAttachment(userMessageId, attachment.id);
     }
   }
 
@@ -463,12 +443,28 @@ app.post("/api/chat/stream", async (c) => {
     }
   }
 
-  const openRouterMessages: OpenRouterMessage[] = await Promise.all(
-    historyItems.map(async (item) => ({
-      role: item.role,
-      content: await buildOpenRouterMessageContent(c, item.role, item.content, item.attachments, attachmentMetaById, "url"),
-    })),
-  );
+  let openRouterMessages: OpenRouterMessage[];
+  try {
+    openRouterMessages = await Promise.all(
+      historyItems.map(async (item) => ({
+        role: item.role,
+        content: await buildOpenRouterMessageContent(
+          c,
+          item.role,
+          item.content,
+          item.attachments,
+          attachmentMetaById,
+          "url",
+          chatSettings.text_file_extraction_mode,
+        ),
+      })),
+    );
+  } catch (error: any) {
+    if (error instanceof Error && error.message.includes("limit for text extraction")) {
+      return c.json({ error: error.message }, 413);
+    }
+    throw error;
+  }
 
   openRouterMessages.unshift({
     role: "system",
@@ -558,6 +554,7 @@ app.post("/api/chat/stream", async (c) => {
         request_url: c.req.url,
         is_admin: auth.isAdmin,
         is_built_in: providerResolution.isBuiltIn,
+        request_id: c.get("requestId") || null,
         history_items: historyItems,
         attachment_meta_by_id: attachmentMetaByIdRecord,
       }),
@@ -626,11 +623,9 @@ app.get("/api/chat/stream/recovery", async (c) => {
   }
 
   const db = c.env.D1_DB;
+  const sessionRepo = new SessionRepository(db);
   const activeWorkspaceId = await getActiveWorkspaceId(db, auth.sub);
-  const existingSession = await db
-    .prepare("SELECT id FROM sessions WHERE id = ? AND workspace_id = ? LIMIT 1")
-    .bind(sessionId, activeWorkspaceId)
-    .first<{ id: string }>();
+  const existingSession = await sessionRepo.findSessionById(sessionId, activeWorkspaceId);
   if (!existingSession?.id) {
     return c.json({ error: "Session not found in active workspace." }, 404);
   }
@@ -668,11 +663,9 @@ app.get("/api/stats/usage", async (c) => {
   }
   const hasSessionFilter = Boolean(sessionId);
   if (hasSessionFilter) {
+    const sessionRepo = new SessionRepository(db);
     const activeWorkspaceId = await getActiveWorkspaceId(db, auth.sub);
-    const existingSession = await db
-      .prepare("SELECT id FROM sessions WHERE id = ? AND workspace_id = ? LIMIT 1")
-      .bind(sessionId as string, activeWorkspaceId)
-      .first<{ id: string }>();
+    const existingSession = await sessionRepo.findSessionById(sessionId as string, activeWorkspaceId);
     if (!existingSession?.id) {
       return c.json({ error: "Session not found in active workspace." }, 404);
     }

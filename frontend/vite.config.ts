@@ -15,15 +15,6 @@ const resolveCommitHash = (): string => {
 export default defineConfig({
   plugins: [react()],
   build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom'],
-          'vendor-clerk': ['@clerk/clerk-react'],
-          'vendor-utils': ['lucide-react', 'classnames', 'tailwind-merge', 'zustand'],
-        },
-      },
-    },
     chunkSizeWarningLimit: 1000,
   },
   define: {

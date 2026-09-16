@@ -55,7 +55,7 @@ export interface Attachment {
   created_at: number;
 }
 
-export type AppTheme = "standard" | "ethereal-light";
+export type AppTheme = "standard" | "ethereal-light" | "ethereal-dark";
 
 export interface UserProfile {
   username: string;
@@ -92,6 +92,9 @@ export interface ChatGenerationSettings {
   attachment_mode: "url" | "base64";
   disable_max_output_tokens: boolean;
   daily_budget_enabled: boolean;
+  text_file_extraction_mode: "xml" | "url";
+  image_compression_enabled: boolean;
+  image_max_dimension: number;
 }
 
 export interface DailyBudgetStatus {

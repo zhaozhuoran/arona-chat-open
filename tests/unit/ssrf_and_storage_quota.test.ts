@@ -72,7 +72,19 @@ test("assertSafeEndpoint private and loopback IPv4 ranges", () => {
 });
 
 test("assertSafeEndpoint private and loopback IPv6 ranges", () => {
-  // Loopback
+  // Loopback & Unspecified
+  assert.throws(() => {
+    assertSafeEndpoint("https://[::]/v1");
+  }, /Endpoint host not allowed./);
+
+  assert.throws(() => {
+    assertSafeEndpoint("https://[0:0:0:0:0:0:0:0]/v1");
+  }, /Endpoint host not allowed./);
+
+  assert.throws(() => {
+    assertSafeEndpoint("https://[0::0]/v1");
+  }, /Endpoint host not allowed./);
+
   assert.throws(() => {
     assertSafeEndpoint("https://[::1]/v1");
   }, /Endpoint host not allowed./);

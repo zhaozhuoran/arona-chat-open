@@ -4,6 +4,7 @@ import { ClerkProvider } from '@clerk/clerk-react'
 import 'katex/dist/katex.min.css'
 import './index.css'
 import App from './App.tsx'
+import { CLERK_PUBLISHABLE_KEY, PREVIEW_PASSWORD } from './config'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -56,8 +57,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
   }
 }
 
-const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
-const PREVIEW_PASSWORD = import.meta.env.VITE_PREVIEW_PASSWORD
+const PUBLISHABLE_KEY = CLERK_PUBLISHABLE_KEY
 
 const rootElement = document.getElementById('root')!;
 

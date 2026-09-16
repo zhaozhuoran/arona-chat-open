@@ -19,11 +19,25 @@ import type { Env } from "./types";
 import { TOOLS, getAvailableTools } from "./tools";
 import { GENERATED_BACKEND_BUILD_HASH, GENERATED_BACKEND_BUILD_TIME } from "./build-info.generated";
 import { getAdminEmails, isAdminEmail, verifyClerkToken, getClerkUserEmail } from "./auth-utils";
+import {
+  DEFAULT_MODEL_DEFS,
+  MODELS_WITHOUT_REASONING,
+  shouldExcludeReasoning,
+  DEFAULT_PRICING
+} from "./config";
+
+export {
+  DEFAULT_MODEL_DEFS,
+  MODELS_WITHOUT_REASONING,
+  shouldExcludeReasoning,
+  DEFAULT_PRICING
+};
 
 export type AppVariables = {
   requestId: string;
   requestStartedAt: number;
   logLevel?: LogLevel;
+  isAdmin?: boolean;
 };
 
 export const readBackendBuildInfo = (env: Env): { backend_build_hash: string; backend_build_time: string } => ({
@@ -50,7 +64,7 @@ export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 export const DEFAULT_MODEL = "google/gemini-3-flash-preview";
 export const DEFAULT_PASSKEY_RP_NAME = "Arona Chat";
 export const MAX_SESSION_TITLE_LENGTH = 60;
-export const LATEST_SCHEMA_VERSION = 24;
+export const LATEST_SCHEMA_VERSION = 25;
 export const EMPTY_MODEL_TEXT_FALLBACK = " ";
 export const API_FILES_PREFIX_RE = /^\/api\/files\/+/;
 export const AUTHENTICATED_FILE_PROXY_PATH_RE = /\/api\/files\/(?!public(?:\?|$))/;
@@ -259,85 +273,6 @@ Provide highly reliable, structured, and accurate assistance, while maintaining 
 
 
 
-export const DEFAULT_MODEL_DEFS: Array<{ id: string; name: string }> = [
-
-  { id: "openai/gpt-5-mini", name: "OpenAI: GPT-5 Mini" },
-  { id: "openai/gpt-5.5", name: "OpenAI: GPT-5.5" },
-  { id: "openai/gpt-5.6-luna", name: "OpenAI: GPT-5.6 Luna" },
-  { id: "openai/gpt-5.6-luna-pro", name: "OpenAI: GPT-5.6 Luna Pro" },
-  { id: "openai/gpt-5.6-terra", name: "OpenAI: GPT-5.6 Terra" },
-  { id: "openai/gpt-5.6-terra-pro", name: "OpenAI: GPT-5.6 Terra Pro" },
-  { id: "openai/gpt-5.6-sol", name: "OpenAI: GPT-5.6 Sol" },
-  { id: "openai/gpt-5.6-sol-pro", name: "OpenAI: GPT-5.6 Sol Pro" },
-  
-  
-
-
-  { id: "google/gemini-3-flash-preview", name: "Google: Gemini 3 Flash Preview" },
-  { id: "google/gemini-3.1-pro-preview", name: "Google: Gemini 3.1 Pro Preview" },
-  { id: "google/gemini-3.5-flash", name: "Google: Gemini 3.5 Flash" },
-
-
-  { id: "anthropic/claude-sonnet-4.6", name: "Anthropic: Claude Sonnet 4.6" },
-  { id: "anthropic/claude-opus-4.8", name: "Anthropic: Claude Opus 4.8" },
-  { id: "anthropic/claude-opus-4.8-fast", name: "Anthropic: Claude Opus 4.8 (Fast)" },
-  { id: "anthropic/claude-fable-5", name: "Anthropic: Claude Fable 5" },
-  
-];
-
-export const MODELS_WITHOUT_REASONING: string[] = [
-  "openai/gpt-5.6-luna-pro",
-  "openai/gpt-5.6-terra-pro",
-  "openai/gpt-5.6-sol-pro"
-];
-
-export const shouldExcludeReasoning = (
-  modelId: string | null | undefined,
-  modelName: string | null | undefined,
-): boolean => {
-  const normalizedId = modelId?.trim().toLowerCase();
-  const normalizedName = modelName?.trim().toLowerCase();
-
-  return MODELS_WITHOUT_REASONING.some((m) => {
-    const normalizedTarget = m.toLowerCase();
-    return (
-      (normalizedId && normalizedId === normalizedTarget) ||
-      (normalizedName && normalizedName === normalizedTarget)
-    );
-  });
-};
-
-/*
-  { id: "qwen/qwen3-32b", name: "Qwen: Qwen3 32B" },
-*/
-
-export const DEFAULT_PRICING: Record<string, { input_usd_per_million: number; output_usd_per_million: number }> = {
-  "openai/gpt-5-mini": { input_usd_per_million: 0.25, output_usd_per_million: 2.00 },
-  "openai/gpt-5.5": { input_usd_per_million: 5.00, output_usd_per_million: 30.00 },
-  "openai/gpt-5.5-pro": { input_usd_per_million: 30.00, output_usd_per_million: 180.00 },
-  "openai/gpt-5.6-luna": { input_usd_per_million: 1.00, output_usd_per_million: 6.00 },
-  "openai/gpt-5.6-luna-pro": { input_usd_per_million: 1.00, output_usd_per_million: 6.00 },
-  "openai/gpt-5.6-terra": { input_usd_per_million: 2.50, output_usd_per_million: 15.00 },
-  "openai/gpt-5.6-terra-pro": { input_usd_per_million: 2.50, output_usd_per_million: 15.00 },
-  "openai/gpt-5.6-sol": { input_usd_per_million: 5.00, output_usd_per_million: 30.00 },
-  "openai/gpt-5.6-sol-pro": { input_usd_per_million: 5.00, output_usd_per_million: 30.00 },
-  
-  
-  "google/gemini-3-flash-preview": { input_usd_per_million: 0.50, output_usd_per_million: 3.00 },
-  "google/gemini-3.1-pro-preview": { input_usd_per_million: 2.00, output_usd_per_million: 12.00 },
-  "google/gemini-3.5-flash": { input_usd_per_million: 1.50, output_usd_per_million: 9.00 },
-
-
-  "anthropic/claude-sonnet-4.6": { input_usd_per_million: 3.00, output_usd_per_million: 15.00 },
-  "anthropic/claude-opus-4.8": { input_usd_per_million: 5.00, output_usd_per_million: 25.00 },
-  "anthropic/claude-opus-4.8-fast": { input_usd_per_million: 10.00, output_usd_per_million: 50.00 },
-  "anthropic/claude-fable-5": { input_usd_per_million: 10.00, output_usd_per_million: 50.00 },
-
-    
-  "xiaomi/mimo-v2-pro": { input_usd_per_million: 1.00, output_usd_per_million: 3.00 },
-  "qwen/qwen3-32b": { input_usd_per_million: 0.08, output_usd_per_million: 0.24 },
-  "minimax/minimax-m2-her": { input_usd_per_million: 0.30, output_usd_per_million: 1.20 },
-};
 
 export type AppContext = Context<AppConfig>;
 
@@ -449,6 +384,9 @@ export type ChatSettings = {
   attachment_mode: "url" | "base64";
   disable_max_output_tokens: boolean;
   daily_budget_enabled: boolean;
+  text_file_extraction_mode: "xml" | "url";
+  image_compression_enabled: boolean;
+  image_max_dimension: number;
 };
 
 export const SERVICE_TIER_MULTIPLIERS: Record<ServiceTier, number> = {
@@ -714,6 +652,7 @@ export type ChatStreamSubmitPayload = {
   request_url: string;
   is_admin: boolean;
   is_built_in: boolean;
+  request_id?: string | null;
   history_items?: SessionMessage[];
   attachment_meta_by_id?: Record<string, AttachmentModelMeta>;
 };
@@ -722,7 +661,7 @@ export type ChatStreamStoredJob = {
   job_id: string;
   state: ChatStreamJobState;
   client_request_id: string | null;
-  payload: Pick<ChatStreamSubmitPayload, "session_id" | "user_id" | "user_message_id" | "new_session" | "is_admin">;
+  payload: Pick<ChatStreamSubmitPayload, "session_id" | "user_id" | "user_message_id" | "new_session" | "is_admin"> & { request_id?: string | null };
   cursor: number | null;
   created_at: number;
   updated_at: number;
@@ -1417,6 +1356,15 @@ export const ensureDatabaseReady = async (db: D1Database): Promise<void> => {
           .run();
       }
 
+      if (currentVersion < 25) {
+        await applySchemaV25(db);
+        currentVersion = 25;
+        await db
+          .prepare("UPDATE schema_meta SET version = ?, updated_at = ? WHERE id = 1")
+          .bind(currentVersion, Date.now())
+          .run();
+      }
+
       if (currentVersion > LATEST_SCHEMA_VERSION) {
         throw new Error(`Database schema version ${currentVersion} is newer than backend supported version ${LATEST_SCHEMA_VERSION}.`);
       }
@@ -1733,7 +1681,11 @@ app.onError((error, c) => {
   );
 
   c.header("X-Request-ID", requestId);
-  return c.json({ error: error.message || "Internal server error.", request_id: requestId }, 500);
+
+  // Securely mask unhandled internal error messages for non-admin/unauthenticated requests to prevent sensitive leakage
+  const isAdmin = c.get("isAdmin") === true;
+  const errorMessage = isAdmin ? (error.message || "Internal server error.") : "Internal server error.";
+  return c.json({ error: errorMessage, request_id: requestId }, 500);
 });
 
 app.get("/", (c) => c.text("Arona Chat Backend is running"));
@@ -1998,87 +1950,100 @@ export const requireAuth = async (c: AppContext): Promise<AuthTokenPayload | Res
     return c.json({ error: "Authentication required." }, 401);
   }
 
-  // Check for E2E test bypass (only allowed in development/test environments)
+  // 1. Check for E2E test bypass (only allowed in development/test environments)
   const e2eTestEnabled = c.env.E2E_TEST === "1" || c.env.E2E_TEST === "true";
-  const e2eTestToken = c.env.E2E_TEST_TOKEN;
-  if (e2eTestEnabled && e2eTestToken && timingSafeEqual(token, e2eTestToken)) {
-    const now = Math.floor(Date.now() / 1000);
-    return {
-      sub: "single-user",
-      isAdmin: true,
-      canManageAi: true,
-      canViewAllUsers: true,
-      method: "passkey",
-      iat: now,
-      exp: now + TOKEN_TTL_SECONDS,
-    };
+  if (e2eTestEnabled) {
+    const e2eTestToken = c.env.E2E_TEST_TOKEN;
+    if (e2eTestToken && timingSafeEqual(token, e2eTestToken)) {
+      const now = Math.floor(Date.now() / 1000);
+      c.set("isAdmin", true);
+      return {
+        sub: "single-user",
+        isAdmin: true,
+        canManageAi: true,
+        canViewAllUsers: true,
+        method: "passkey",
+        iat: now,
+        exp: now + TOKEN_TTL_SECONDS,
+      };
+    }
   }
 
-  // First try verify as Clerk token
-  const clerkClaims = await verifyClerkToken(c, token);
-  if (clerkClaims) {
-    let email = (clerkClaims as any).email;
-    if (!email && clerkClaims.sub) {
-      // Fetch email from Clerk API if not in JWT claims
-      email = await getClerkUserEmail(c, clerkClaims.sub);
-    }
-
-    if (!email) {
-      return c.json({ error: "Clerk session does not contain email." }, 403);
-    }
-
-    const adminEmails = getAdminEmails(c.env);
-    const isAdmin = isAdminEmail(email, adminEmails);
-
-    // Whitelist check
-    const enableWhitelist = c.env.ENABLE_WHITELIST === "1" || c.env.ENABLE_WHITELIST === "true";
-    if (enableWhitelist && !isAdmin) {
-      const whitelistEmails = (c.env.WHITELIST_EMAILS ?? "")
-        .split(",")
-        .map((s) => s.trim().toLowerCase())
-        .filter((s) => s.length > 0);
-      const isWhitelisted = whitelistEmails.includes(email.toLowerCase());
-      if (!isWhitelisted) {
-        logInfo("auth.whitelist_denied", { ...buildRequestLogPayload(c), email });
-        return c.json({ error: "This application has enabled a whitelist." }, 403);
+  // 2. Try verifying as a Clerk token
+  try {
+    const clerkClaims = await verifyClerkToken(c, token);
+    if (clerkClaims) {
+      let email = (clerkClaims as any).email;
+      if (!email && clerkClaims.sub) {
+        // Fetch email from Clerk API if not in JWT claims
+        email = await getClerkUserEmail(c, clerkClaims.sub);
       }
+
+      if (!email) {
+        return c.json({ error: "Clerk session does not contain email." }, 403);
+      }
+
+      const adminEmails = getAdminEmails(c.env);
+      const isAdmin = isAdminEmail(email, adminEmails);
+
+      // Whitelist check
+      const enableWhitelist = c.env.ENABLE_WHITELIST === "1" || c.env.ENABLE_WHITELIST === "true";
+      if (enableWhitelist && !isAdmin) {
+        const whitelistEmails = (c.env.WHITELIST_EMAILS ?? "")
+          .split(",")
+          .map((s) => s.trim().toLowerCase())
+          .filter((s) => s.length > 0);
+        const isWhitelisted = whitelistEmails.includes(email.toLowerCase());
+        if (!isWhitelisted) {
+          logInfo("auth.whitelist_denied", { ...buildRequestLogPayload(c), email });
+          return c.json({ error: "This application has enabled a whitelist." }, 403);
+        }
+      }
+
+      const devAdminShareChat = c.env.DEV_ADMIN_SHARE_CHAT === "1" || c.env.DEV_ADMIN_SHARE_CHAT === "true";
+      const sub = (isAdmin && devAdminShareChat) ? "single-user" : clerkClaims.sub;
+      const perms = await getUserPermissions(c.env.D1_DB, sub, isAdmin);
+
+      await ensureProfile(c.env.D1_DB, sub, perms.isAdmin, email);
+
+      c.set("isAdmin", perms.isAdmin);
+      return {
+        sub,
+        isAdmin: perms.isAdmin,
+        canManageAi: perms.canManageAi,
+        canViewAllUsers: perms.canViewAllUsers,
+        method: "passkey", // Defaulting to passkey method for Clerk sessions
+        iat: clerkClaims.iat || Math.floor(Date.now() / 1000),
+        exp: clerkClaims.exp || Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS,
+      };
     }
-
-    const devAdminShareChat = c.env.DEV_ADMIN_SHARE_CHAT === "1" || c.env.DEV_ADMIN_SHARE_CHAT === "true";
-    const sub = (isAdmin && devAdminShareChat) ? "single-user" : clerkClaims.sub;
-    const perms = await getUserPermissions(c.env.D1_DB, sub, isAdmin);
-
-    await ensureProfile(c.env.D1_DB, sub, perms.isAdmin, email);
-
-    return {
-      sub,
-      isAdmin: perms.isAdmin,
-      canManageAi: perms.canManageAi,
-      canViewAllUsers: perms.canViewAllUsers,
-      method: "passkey", // Defaulting to passkey method for Clerk sessions
-      iat: clerkClaims.iat || Math.floor(Date.now() / 1000),
-      exp: clerkClaims.exp || Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS,
-    };
+  } catch (error) {
+    logInfo("auth.clerk_verification_exception", { error: String(error) });
   }
 
-  // Fallback to legacy JWT verification (legacy password / passkey sessions).
+  // 3. Fallback to legacy JWT verification (legacy password / passkey sessions).
   // Disabled by default; only available when explicitly enabled via
   // DEV_ENABLE_PASSKEY_AUTH. When disabled, legacy "single-user" admin tokens
   // are rejected so they cannot bypass the Clerk/whitelist auth path.
   if (isPasskeyAuthEnabled(c.env)) {
-    const payload = await verifyAuthToken(c.env, token);
-    if (payload) {
-      const adminEmails = getAdminEmails(c.env);
-      const email = (payload as any).email || "";
-      const isAdmin = payload.sub === "single-user" || isAdminEmail(email, adminEmails);
-      const perms = await getUserPermissions(c.env.D1_DB, payload.sub, isAdmin);
+    try {
+      const payload = await verifyAuthToken(c.env, token);
+      if (payload) {
+        const adminEmails = getAdminEmails(c.env);
+        const email = (payload as any).email || "";
+        const isAdmin = payload.sub === "single-user" || isAdminEmail(email, adminEmails);
+        const perms = await getUserPermissions(c.env.D1_DB, payload.sub, isAdmin);
 
-      return {
-        ...payload,
-        isAdmin: perms.isAdmin,
-        canManageAi: perms.canManageAi,
-        canViewAllUsers: perms.canViewAllUsers,
-      };
+        c.set("isAdmin", perms.isAdmin);
+        return {
+          ...payload,
+          isAdmin: perms.isAdmin,
+          canManageAi: perms.canManageAi,
+          canViewAllUsers: perms.canViewAllUsers,
+        };
+      }
+    } catch (error) {
+      logInfo("auth.legacy_verification_exception", { error: String(error) });
     }
   }
 
@@ -2547,14 +2512,17 @@ export const readProfile = async (c: AppContext, userId: string, isAdmin: boolea
     : fallbackStreamingStyle;
 
   const envTheme = c.env.DEFAULT_THEME?.trim();
-  const fallbackTheme = envTheme === "standard" ? "standard" : "ethereal-light";
+  const fallbackTheme = (envTheme === "standard" || envTheme === "ethereal-light" || envTheme === "ethereal-dark")
+    ? envTheme
+    : "ethereal-light";
+  const userTheme = row.theme === "standard" || row.theme === "ethereal-light" || row.theme === "ethereal-dark" ? row.theme : fallbackTheme;
 
   return {
     username: row.username,
     avatar_key: avatarKey,
     avatar_url: avatarUrl,
     dynamic_background: Number(row.dynamic_background) === 1,
-    theme: row.theme === "standard" ? "standard" : fallbackTheme,
+    theme: userTheme,
     arona_bubble_style: (row.arona_bubble_style as any) || "none",
     ethereal_streaming_style: finalStreamingStyle as any,
     send_shortcut: normalizeSendShortcut(row.send_shortcut),
@@ -2727,6 +2695,28 @@ export const normalizeDisableMaxOutputTokens = (value: string | null | undefined
   return value === "1" || value.toLowerCase() === "true";
 };
 
+export const normalizeTextFileExtractionMode = (value: string | null | undefined): "xml" | "url" => {
+  if (value === "url") {
+    return "url";
+  }
+  return "xml";
+};
+
+export const normalizeImageCompressionEnabled = (value: string | null | undefined): boolean => {
+  if (value === null || value === undefined) {
+    return true;
+  }
+  return value === "1" || value.toLowerCase() === "true";
+};
+
+export const normalizeImageMaxDimension = (value: string | null | undefined): number => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 2048;
+  }
+  return Math.min(8192, Math.max(512, Math.round(parsed)));
+};
+
 export const getChatSettings = async (db: D1Database, userId: string): Promise<ChatSettings> => {
   const [
     serviceTier,
@@ -2740,6 +2730,9 @@ export const getChatSettings = async (db: D1Database, userId: string): Promise<C
     attachmentMode,
     disableMaxOutputTokens,
     dailyBudgetEnabled,
+    textFileExtractionMode,
+    imageCompressionEnabled,
+    imageMaxDimension,
   ] = await Promise.all([
     getAppSetting(db, "service_tier", userId),
     getAppSetting(db, "reasoning_effort", userId),
@@ -2752,6 +2745,9 @@ export const getChatSettings = async (db: D1Database, userId: string): Promise<C
     getAppSetting(db, "attachment_mode", userId),
     getAppSetting(db, "disable_max_output_tokens", userId),
     getAppSetting(db, "daily_budget_enabled", userId),
+    getAppSetting(db, "text_file_extraction_mode", userId),
+    getAppSetting(db, "image_compression_enabled", userId),
+    getAppSetting(db, "image_max_dimension", userId),
   ]);
   const todayUtc = getCurrentUtcDate();
   const temporaryBudgetActive = temporaryDailyBudgetDateUtc === todayUtc;
@@ -2767,6 +2763,9 @@ export const getChatSettings = async (db: D1Database, userId: string): Promise<C
     attachment_mode: normalizeAttachmentMode(attachmentMode),
     disable_max_output_tokens: normalizeDisableMaxOutputTokens(disableMaxOutputTokens),
     daily_budget_enabled: dailyBudgetEnabled === null ? true : (dailyBudgetEnabled === "1" || dailyBudgetEnabled === "true"),
+    text_file_extraction_mode: normalizeTextFileExtractionMode(textFileExtractionMode),
+    image_compression_enabled: normalizeImageCompressionEnabled(imageCompressionEnabled),
+    image_max_dimension: normalizeImageMaxDimension(imageMaxDimension),
   };
 };
 
@@ -2884,6 +2883,48 @@ export const resolveAttachmentType = (mimeType: string): MessageAttachmentType =
   return "file";
 };
 
+export const TEXT_FILE_EXTENSIONS = new Set([
+  ".txt", ".md", ".markdown", ".json", ".csv", ".tsv", ".py", ".js", ".ts", ".tsx",
+  ".jsx", ".html", ".css", ".yml", ".yaml", ".sh", ".xml", ".c", ".cpp", ".h",
+  ".hpp", ".java", ".go", ".rs", ".php", ".sql", ".ini", ".conf", ".toml", ".log"
+]);
+
+export const TEXT_FILE_MIME_TYPES = new Set([
+  "application/json", "application/xml", "application/javascript",
+  "application/x-javascript", "application/x-typescript", "application/yaml",
+  "application/x-yaml", "application/x-sh", "application/sql", "application/xml-dtd"
+]);
+
+export const isTextFile = (fileName: string | null | undefined, mimeType: string | null | undefined): boolean => {
+  const normMime = normalizeMimeType(mimeType);
+  if (normMime.startsWith("text/")) {
+    return true;
+  }
+  if (TEXT_FILE_MIME_TYPES.has(normMime)) {
+    return true;
+  }
+  if (fileName) {
+    const lowerName = fileName.toLowerCase();
+    const dotIndex = lowerName.lastIndexOf(".");
+    if (dotIndex !== -1) {
+      const ext = lowerName.slice(dotIndex);
+      if (TEXT_FILE_EXTENSIONS.has(ext)) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
+export const escapeXmlAttribute = (str: string): string => {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+};
+
 export const fetchAttachmentBase64 = async (
   c: AppContext,
   meta: AttachmentModelMeta,
@@ -2911,6 +2952,7 @@ export const buildOpenRouterMessageContent = async (
   attachments: ChatAttachmentPayload[],
   attachmentMetaById: Map<string, AttachmentModelMeta>,
   attachmentMode: "url" | "base64" = "url",
+  textFileExtractionMode: "xml" | "url" = "xml",
 ): Promise<OpenRouterMessage["content"]> => {
   if (role !== "user") {
     return value;
@@ -2919,6 +2961,7 @@ export const buildOpenRouterMessageContent = async (
   const normalizedText = value.trim();
   const contentParts: Array<OpenRouterContentPart | OpenRouterImagePart | OpenRouterFilePart | OpenRouterInputAudioPart> = [];
   const fallbackTextAttachments: ChatAttachmentPayload[] = [];
+  const extractedTextBlocks: string[] = [];
 
   for (const attachment of attachments) {
     const attachmentUrl = attachment.url.trim();
@@ -3011,6 +3054,34 @@ export const buildOpenRouterMessageContent = async (
       }
     }
 
+    // Try text file content extraction if setting is XML
+    if (textFileExtractionMode === "xml" && isTextFile(attachment.file_name, attachment.mime_type)) {
+      if (attachment.size > 1024 * 1024) {
+        throw new Error(`File "${attachment.file_name}" exceeds the 1MB limit for text extraction.`);
+      }
+      let extracted = false;
+      if (meta) {
+        try {
+          const objectKey = await resolveAttachmentObjectKey(c, meta);
+          const fileObject = objectKey ? await c.env.R2_BUCKET.get(objectKey) : null;
+          if (fileObject) {
+            const textContent = await fileObject.text();
+            const escapedName = escapeXmlAttribute(attachment.file_name || "");
+            const escapedMime = escapeXmlAttribute(attachment.mime_type || "");
+            extractedTextBlocks.push(
+              `<file_attachment name="${escapedName}" mime_type="${escapedMime}" size="${attachment.size}">\n${textContent}\n</file_attachment>`
+            );
+            extracted = true;
+          }
+        } catch (err) {
+          logError("backend-utils.text_extraction_failed", { file_name: attachment.file_name }, err);
+        }
+      }
+      if (extracted) {
+        continue;
+      }
+    }
+
     fallbackTextAttachments.push(attachment);
   }
 
@@ -3019,8 +3090,13 @@ export const buildOpenRouterMessageContent = async (
     nonImageLines.push(`Attachment: ${attachment.file_name} (${attachment.mime_type}) ${attachment.url}`);
   }
   const nonImageContext = nonImageLines.join("\n");
-  // Within the fallback text block itself, list attachment context lines before the user-typed text.
-  const textContent = [nonImageContext, normalizedText].filter((item) => item.length > 0).join("\n\n");
+
+  const textContextBlock = [
+    nonImageContext,
+    ...extractedTextBlocks
+  ].filter((item) => item.length > 0).join("\n\n");
+
+  const textContent = [textContextBlock, normalizedText].filter((item) => item.length > 0).join("\n\n");
   // Some providers reject empty user content; keep a non-empty fallback for attachment-only turns.
   const safeTextContent = textContent || EMPTY_MODEL_TEXT_FALLBACK;
 
@@ -3360,7 +3436,22 @@ export const buildInjectedSystemPrompt = async (db: D1Database, env: Env, userId
     SYSTEM_PROMPT_TIMEZONE_OPTIONS.find((item) => item.value === formattedDateTime.resolvedTimeZone)?.label ??
     formattedDateTime.resolvedTimeZone;
   const currentDateTime = formattedDateTime.value;
-  return `${setting}\nCurrent date and time (${timezoneLabel}): ${currentDateTime}\nUse this information only when relevant. Do not mention it unnecessarily.`;
+  let basePrompt = `${setting}\nCurrent date and time (${timezoneLabel}): ${currentDateTime}\nUse this information only when relevant. Do not mention it unnecessarily.`;
+
+  try {
+    const row = await db
+      .prepare("SELECT username FROM profiles WHERE user_id = ?")
+      .bind(userId)
+      .first<{ username: string | null }>();
+    const username = row?.username?.trim();
+    if (username && username.toLowerCase() !== "sensei" && username.toLowerCase() !== "null" && username.toLowerCase() !== "undefined") {
+      basePrompt += `\nThe current user's username is "${username}". You should address them as "${username}" instead of "Sensei" naturally.`;
+    }
+  } catch (error) {
+    console.error("Failed to fetch username in buildInjectedSystemPrompt:", error);
+  }
+
+  return basePrompt;
 };
 
 export const normalizePasskeyRpName = (value: string): string => {
@@ -3677,6 +3768,11 @@ export const applySchemaV24 = async (db: D1Database): Promise<void> => {
   await addColumnIfMissing(db, "profiles", "email", "TEXT");
 };
 
+export const applySchemaV25 = async (db: D1Database): Promise<void> => {
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_request_logs_user_created ON request_logs(user_id, created_at)").run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_usage_records_user_created ON usage_records(user_id, created_at)").run();
+};
+
 export const isModelAllowed = async (
   db: D1Database,
   modelId: string,
@@ -3809,10 +3905,10 @@ export function assertSafeEndpoint(raw: string, env?: Env): string {
       }
     }
 
-    // Block IPv6 loopback/unique-local/link-local ranges
+    // Block IPv6 loopback/unique-local/link-local/unspecified wildcard ranges
     if (host.startsWith("[")) {
       const v6 = host.slice(1, -1).toLowerCase();
-      if (v6 === "::1" || v6 === "0:0:0:0:0:0:0:1" || v6.startsWith("fc") || v6.startsWith("fd") || v6.startsWith("fe8") || v6.startsWith("fe9") || v6.startsWith("fea") || v6.startsWith("feb")) {
+      if (v6 === "::" || v6 === "" || v6 === "::1" || v6 === "0:0:0:0:0:0:0:1" || v6 === "0:0:0:0:0:0:0:0" || v6.startsWith("fc") || v6.startsWith("fd") || v6.startsWith("fe8") || v6.startsWith("fe9") || v6.startsWith("fea") || v6.startsWith("feb")) {
         throw new Error("Endpoint host not allowed.");
       }
 

@@ -1,13 +1,8 @@
-import { memo, lazy, Suspense } from "react";
-
-const MarkdownRenderer = lazy(() => import("./MarkdownRenderer"));
+import { memo } from "react";
+import MarkdownRenderer from "./MarkdownRenderer";
 
 export const LazyMarkdown = memo(({ content }: { content: string }) => {
-  return (
-    <Suspense fallback={<div className="ba-markdown-loading">...</div>}>
-      <MarkdownRenderer content={content} />
-    </Suspense>
-  );
+  return <MarkdownRenderer content={content} />;
 });
 
 LazyMarkdown.displayName = "LazyMarkdown";

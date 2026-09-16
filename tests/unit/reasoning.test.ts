@@ -7,7 +7,8 @@ test("MODELS_WITHOUT_REASONING list contains expected models", () => {
   assert.deepStrictEqual(MODELS_WITHOUT_REASONING, [
     "openai/gpt-5.6-luna-pro",
     "openai/gpt-5.6-terra-pro",
-    "openai/gpt-5.6-sol-pro"
+    "openai/gpt-5.6-sol-pro",
+    "openai/gpt-6-astra-pro"
   ]);
 });
 

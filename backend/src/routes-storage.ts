@@ -204,6 +204,7 @@ import {
 } from "./backend-utils";
 import { getSingleFileSizeLimitBytes } from "./resource-limits";
 import { type MessageAttachmentType } from "@arona-chat/shared";
+import { AttachmentRepository, LibraryRepository } from "./repositories";
 
 
 app.get("/api/attachments", async (c) => {
@@ -241,19 +242,9 @@ app.get("/api/attachments", async (c) => {
     cursorId = idRaw;
   }
 
-  const query =
-    cursorCreatedAt !== null && cursorId !== null
-      ? c.env.D1_DB
-          .prepare(
-            "SELECT id, file_hash, file_name, mime_type, size, r2_url, r2_object_key, cached_get_url, cached_get_url_expires_at, status, user_id, conversation_id, created_at FROM attachments WHERE status = 'active' AND user_id = ? AND (created_at < ? OR (created_at = ? AND id < ?)) ORDER BY created_at DESC, id DESC LIMIT ?",
-          )
-          .bind(auth.sub, cursorCreatedAt, cursorCreatedAt, cursorId, limit)
-      : c.env.D1_DB
-          .prepare(
-            "SELECT id, file_hash, file_name, mime_type, size, r2_url, r2_object_key, cached_get_url, cached_get_url_expires_at, status, user_id, conversation_id, created_at FROM attachments WHERE status = 'active' AND user_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
-          )
-          .bind(auth.sub, limit);
-  const { results } = await query.all<AttachmentRow>();
+  const attachmentRepo = new AttachmentRepository(c.env.D1_DB);
+  const cursor = (cursorCreatedAt !== null && cursorId !== null) ? { createdAt: cursorCreatedAt, id: cursorId } : undefined;
+  const results = await attachmentRepo.listAttachments(auth.sub, limit, cursor);
 
   const items = await Promise.all(
     (results ?? []).map(async (attachment) => {
@@ -319,19 +310,9 @@ app.get("/api/library", async (c) => {
     cursorId = idRaw;
   }
 
-  const query =
-    cursorCreatedAt !== null && cursorId !== null
-      ? c.env.D1_DB
-          .prepare(
-            "SELECT id, file_name, mime_type, size, r2_url, r2_object_key, cached_get_url, cached_get_url_expires_at, status, user_id, created_at FROM library_files WHERE status = 'active' AND user_id = ? AND (created_at < ? OR (created_at = ? AND id < ?)) ORDER BY created_at DESC, id DESC LIMIT ?",
-          )
-          .bind(auth.sub, cursorCreatedAt, cursorCreatedAt, cursorId, limit)
-      : c.env.D1_DB
-          .prepare(
-            "SELECT id, file_name, mime_type, size, r2_url, r2_object_key, cached_get_url, cached_get_url_expires_at, status, user_id, created_at FROM library_files WHERE status = 'active' AND user_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
-          )
-          .bind(auth.sub, limit);
-  const { results } = await query.all<LibraryFileRow>();
+  const libraryRepo = new LibraryRepository(c.env.D1_DB);
+  const cursor = (cursorCreatedAt !== null && cursorId !== null) ? { createdAt: cursorCreatedAt, id: cursorId } : undefined;
+  const results = await libraryRepo.listLibraryFiles(auth.sub, limit, cursor);
 
   const files = await Promise.all(
     (results ?? []).map(async (file) => {
@@ -369,12 +350,8 @@ app.delete("/api/attachments/:id", async (c) => {
   }
 
   const attachmentId = c.req.param("id");
-  const attachment = await c.env.D1_DB
-    .prepare(
-      "SELECT id, file_hash, file_name, mime_type, size, r2_url, r2_object_key, cached_get_url, cached_get_url_expires_at, status, user_id, conversation_id, created_at FROM attachments WHERE id = ? AND status = 'active' AND user_id = ?",
-    )
-    .bind(attachmentId, auth.sub)
-    .first<AttachmentRow>();
+  const attachmentRepo = new AttachmentRepository(c.env.D1_DB);
+  const attachment = await attachmentRepo.findAttachmentById(attachmentId, auth.sub);
   if (!attachment) {
     return c.json({ error: "Attachment not found." }, 404);
   }
@@ -392,12 +369,7 @@ app.delete("/api/attachments/:id", async (c) => {
     }
   }
 
-  await c.env.D1_DB
-    .prepare(
-      "UPDATE attachments SET status = 'deleted', r2_object_key = NULL, cached_get_url = NULL, cached_get_url_expires_at = NULL WHERE id = ? AND user_id = ?",
-    )
-    .bind(attachment.id, auth.sub)
-    .run();
+  await attachmentRepo.deleteAttachment(attachment.id, auth.sub);
 
   return c.json({ success: true });
 });
@@ -409,12 +381,8 @@ app.delete("/api/library/:id", async (c) => {
   }
 
   const fileId = c.req.param("id");
-  const file = await c.env.D1_DB
-    .prepare(
-      "SELECT id, file_name, mime_type, size, r2_url, r2_object_key, cached_get_url, cached_get_url_expires_at, status, user_id, created_at FROM library_files WHERE id = ? AND status = 'active' AND user_id = ?",
-    )
-    .bind(fileId, auth.sub)
-    .first<LibraryFileRow>();
+  const libraryRepo = new LibraryRepository(c.env.D1_DB);
+  const file = await libraryRepo.findLibraryFileById(fileId, auth.sub);
   if (!file) {
     return c.json({ error: "Library file not found." }, 404);
   }
@@ -432,12 +400,7 @@ app.delete("/api/library/:id", async (c) => {
     }
   }
 
-  await c.env.D1_DB
-    .prepare(
-      "UPDATE library_files SET status = 'deleted', r2_object_key = NULL, cached_get_url = NULL, cached_get_url_expires_at = NULL WHERE id = ? AND user_id = ?",
-    )
-    .bind(file.id, auth.sub)
-    .run();
+  await libraryRepo.deleteLibraryFile(file.id, auth.sub);
 
   return c.json({ success: true });
 });
@@ -449,12 +412,8 @@ app.get("/api/attachments/:id/url", async (c) => {
   }
 
   const attachmentId = c.req.param("id");
-  const attachment = await c.env.D1_DB
-    .prepare(
-      "SELECT id, file_hash, file_name, mime_type, size, r2_url, r2_object_key, cached_get_url, cached_get_url_expires_at, status, user_id, conversation_id, created_at FROM attachments WHERE id = ? AND status = 'active' AND user_id = ?",
-    )
-    .bind(attachmentId, auth.sub)
-    .first<AttachmentRow>();
+  const attachmentRepo = new AttachmentRepository(c.env.D1_DB);
+  const attachment = await attachmentRepo.findAttachmentById(attachmentId, auth.sub);
 
   if (!attachment) {
     return c.json({ error: "Attachment not found." }, 404);

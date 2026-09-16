@@ -164,6 +164,9 @@ import {
   normalizeWebSearchEnabled,
   normalizeWebSearchMaxResults,
   normalizeAttachmentMode,
+  normalizeTextFileExtractionMode,
+  normalizeImageCompressionEnabled,
+  normalizeImageMaxDimension,
   getChatSettings,
   getCurrentUtcDate,
   normalizeSessionTitle,
@@ -435,6 +438,14 @@ app.put("/api/settings/chat", async (c) => {
     daily_budget_enabled: auth.isAdmin
       ? (body.daily_budget_enabled === undefined ? current.daily_budget_enabled : Boolean(body.daily_budget_enabled))
       : current.daily_budget_enabled,
+    text_file_extraction_mode: normalizeTextFileExtractionMode(body.text_file_extraction_mode ?? current.text_file_extraction_mode),
+    image_compression_enabled:
+      body.image_compression_enabled === undefined
+        ? current.image_compression_enabled
+        : Boolean(body.image_compression_enabled),
+    image_max_dimension: normalizeImageMaxDimension(
+      body.image_max_dimension === undefined ? String(current.image_max_dimension) : String(body.image_max_dimension),
+    ),
   };
 
   await Promise.all([
@@ -449,6 +460,9 @@ app.put("/api/settings/chat", async (c) => {
     setAppSetting(c.env.D1_DB, "attachment_mode", next.attachment_mode, auth.sub),
     setAppSetting(c.env.D1_DB, "disable_max_output_tokens", next.disable_max_output_tokens ? "1" : "0", auth.sub),
     setAppSetting(c.env.D1_DB, "daily_budget_enabled", next.daily_budget_enabled ? "1" : "0", auth.sub),
+    setAppSetting(c.env.D1_DB, "text_file_extraction_mode", next.text_file_extraction_mode, auth.sub),
+    setAppSetting(c.env.D1_DB, "image_compression_enabled", next.image_compression_enabled ? "1" : "0", auth.sub),
+    setAppSetting(c.env.D1_DB, "image_max_dimension", String(next.image_max_dimension), auth.sub),
   ]);
 
   return c.json({ chat_settings: next });
@@ -542,7 +556,7 @@ app.put("/api/profile", async (c) => {
     username?: string;
     avatar_key?: string | null;
     dynamic_background?: boolean;
-    theme?: "standard" | "ethereal-light";
+    theme?: "standard" | "ethereal-light" | "ethereal-dark";
     arona_bubble_style?: "none" | "border";
     ethereal_streaming_style?: "typewriter" | "buffered";
     send_shortcut?: "ctrl_enter" | "enter";
@@ -565,7 +579,7 @@ app.put("/api/profile", async (c) => {
     body.dynamic_background === undefined ? currentProfile.dynamic_background : Boolean(body.dynamic_background);
 
   let nextTheme = body.theme === undefined ? (rawRow?.theme ?? null) : body.theme;
-  if (nextTheme !== null && nextTheme !== "standard" && nextTheme !== "ethereal-light") {
+  if (nextTheme !== null && nextTheme !== "standard" && nextTheme !== "ethereal-light" && nextTheme !== "ethereal-dark") {
     nextTheme = "ethereal-light";
   }
 
