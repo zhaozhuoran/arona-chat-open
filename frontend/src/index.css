@@ -1429,6 +1429,15 @@ body.theme-ethereal-dark {
   animation: ba-model-menu-enter 0.25s var(--arona-ease-enter) forwards;
 }
 
+@keyframes ba-modal-pop-enter {
+  from { transform: scale(0.95) translateY(8px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.animate-ba-modal-pop {
+  animation: ba-modal-pop-enter 0.22s var(--arona-ease-enter) forwards;
+}
+
 .ba-scroll-to-bottom-wrap {
   position: absolute;
   bottom: 100px;
@@ -3159,6 +3168,30 @@ select {
   align-items: center;
   justify-content: center;
   padding: 16px;
+}
+
+.ba-share-modal-backdrop {
+  z-index: 100;
+}
+
+.ba-share-modal {
+  width: min(92vw, 512px);
+  max-height: min(88vh, 720px);
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 640px) {
+  .ba-share-modal-backdrop {
+    padding: 12px;
+  }
+  .ba-share-modal {
+    width: 100% !important;
+    max-width: calc(100vw - 24px) !important;
+    max-height: calc(100vh - 24px) !important;
+    max-height: calc(100dvh - 24px) !important;
+    border-radius: 16px !important;
+  }
 }
 
 .ba-rename-modal {

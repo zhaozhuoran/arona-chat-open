@@ -235,7 +235,8 @@ import {
   type RegistrationResponseJSON,
   type WebAuthnCredential,
 } from "@simplewebauthn/server";
-import { SYSTEM_PROMPT_TIMEZONE_OPTIONS, type LogLevel } from "@arona-chat/shared";
+import { SYSTEM_PROMPT_TIMEZONE_OPTIONS, type LogLevel, type AppTheme } from "@arona-chat/shared";
+import { ShareRepository } from "./repositories";
 
 app.post("/api/auth/password-login", async (c) => {
   return c.json({ error: "Password login is disabled. Please use Clerk or Passkey login." }, 403);
@@ -1621,4 +1622,188 @@ app.get("/api/sessions/:id/messages", async (c) => {
     } catch (error) {
       return c.json({ error: "Failed to fetch upstream models." }, 502);
     }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Share Chat Endpoints (Authenticated management & Public read-only access)
+  // ---------------------------------------------------------------------------
+
+  app.get("/api/sessions/:id/shares", async (c) => {
+    const auth = await requireAuth(c);
+    if (auth instanceof Response) return auth;
+
+    const sessionId = c.req.param("id")?.trim();
+    if (!sessionId) return c.json({ error: "Session id is required." }, 400);
+
+    const shareRepo = new ShareRepository(c.env.D1_DB);
+    const rows = await shareRepo.listSharesBySession(sessionId, auth.sub);
+    const shares = rows.map((r) => ({
+      token: r.token,
+      session_id: r.session_id,
+      user_id: r.user_id,
+      allow_attachments: Boolean(r.allow_attachments),
+      theme: r.theme,
+      expires_at: r.expires_at ? Number(r.expires_at) : null,
+      created_at: Number(r.created_at),
+      updated_at: Number(r.updated_at),
+    }));
+
+    return c.json({ shares });
+  });
+
+  app.post("/api/sessions/:id/shares", async (c) => {
+    const auth = await requireAuth(c);
+    if (auth instanceof Response) return auth;
+
+    const sessionId = c.req.param("id")?.trim();
+    if (!sessionId) return c.json({ error: "Session id is required." }, 400);
+
+    const activeWorkspaceId = await getActiveWorkspaceId(c.env.D1_DB, auth.sub);
+    const existingSession = await c.env.D1_DB
+      .prepare("SELECT id FROM sessions WHERE id = ? AND workspace_id = ? LIMIT 1")
+      .bind(sessionId, activeWorkspaceId)
+      .first<{ id: string }>();
+    if (!existingSession?.id) {
+      return c.json({ error: "Session not found in active workspace." }, 404);
+    }
+
+    const body = await c.req.json<{
+      allow_attachments?: boolean;
+      theme?: string;
+      expires_in_seconds?: number | null;
+    }>();
+
+    const userProfile = await readProfile(c, auth.sub, auth.isAdmin);
+    let theme = body.theme?.trim() || userProfile.theme || "ethereal-light";
+    if (theme !== "standard" && theme !== "ethereal-light" && theme !== "ethereal-dark" && theme !== "system") {
+      theme = "ethereal-light";
+    }
+
+    const allowAttachments = Boolean(body.allow_attachments);
+    const now = Date.now();
+    const expiresIn = typeof body.expires_in_seconds === "number" && body.expires_in_seconds > 0 ? body.expires_in_seconds : null;
+    const expiresAt = expiresIn ? now + expiresIn * 1000 : null;
+
+    // Generate crypto random token (32 random bytes as hex string)
+    const randomBytes = new Uint8Array(24);
+    crypto.getRandomValues(randomBytes);
+    const token = toBase64Url(randomBytes);
+
+    const shareRepo = new ShareRepository(c.env.D1_DB);
+    await shareRepo.createShare(token, sessionId, auth.sub, allowAttachments, theme, expiresAt, now);
+
+    return c.json({
+      share: {
+        token,
+        session_id: sessionId,
+        user_id: auth.sub,
+        allow_attachments: allowAttachments,
+        theme,
+        expires_at: expiresAt,
+        created_at: now,
+        updated_at: now,
+      },
+    });
+  });
+
+  app.put("/api/shares/:token", async (c) => {
+    const auth = await requireAuth(c);
+    if (auth instanceof Response) return auth;
+
+    const token = c.req.param("token")?.trim();
+    if (!token) return c.json({ error: "Token is required." }, 400);
+
+    const body = await c.req.json<{
+      allow_attachments?: boolean;
+      theme?: string;
+      expires_in_seconds?: number | null;
+    }>();
+
+    const shareRepo = new ShareRepository(c.env.D1_DB);
+    const existing = await shareRepo.findShareByToken(token);
+    if (!existing || existing.user_id !== auth.sub) {
+      return c.json({ error: "Share token not found." }, 404);
+    }
+
+    const allowAttachments = body.allow_attachments !== undefined ? Boolean(body.allow_attachments) : Boolean(existing.allow_attachments);
+    let theme = body.theme !== undefined ? body.theme.trim() : existing.theme;
+    if (theme !== "standard" && theme !== "ethereal-light" && theme !== "ethereal-dark" && theme !== "system") {
+      theme = "ethereal-light";
+    }
+
+    const now = Date.now();
+    let expiresAt: number | null = existing.expires_at;
+    if (body.expires_in_seconds !== undefined) {
+      expiresAt = typeof body.expires_in_seconds === "number" && body.expires_in_seconds > 0 ? now + body.expires_in_seconds * 1000 : null;
+    }
+
+    const updated = await shareRepo.updateShare(token, auth.sub, allowAttachments, theme, expiresAt, now);
+    if (!updated) {
+      return c.json({ error: "Failed to update share." }, 500);
+    }
+
+    return c.json({ success: true });
+  });
+
+  app.delete("/api/shares/:token", async (c) => {
+    const auth = await requireAuth(c);
+    if (auth instanceof Response) return auth;
+
+    const token = c.req.param("token")?.trim();
+    if (!token) return c.json({ error: "Token is required." }, 400);
+
+    const shareRepo = new ShareRepository(c.env.D1_DB);
+    const deleted = await shareRepo.deleteShare(token, auth.sub);
+    if (!deleted) {
+      return c.json({ error: "Share token not found." }, 404);
+    }
+
+    return c.json({ success: true });
+  });
+
+  // Public read-only endpoints (no login required)
+  app.get("/api/share/:token", async (c) => {
+    const token = c.req.param("token")?.trim();
+    if (!token) return c.json({ error: "Token is required." }, 400);
+
+    const shareRepo = new ShareRepository(c.env.D1_DB);
+    const share = await shareRepo.findShareByToken(token);
+    if (!share) {
+      return c.json({ error: "Share link not found or has been revoked." }, 404);
+    }
+
+    if (share.expires_at && Date.now() > Number(share.expires_at)) {
+      return c.json({ error: "Share link has expired." }, 410);
+    }
+
+    const session = await c.env.D1_DB
+      .prepare("SELECT id, title, created_at, archived_at FROM sessions WHERE id = ? LIMIT 1")
+      .bind(share.session_id)
+      .first<{ id: string; title: string; created_at: number; archived_at: number | null }>();
+
+    if (!session || session.archived_at) {
+      return c.json({ error: "Session not found." }, 404);
+    }
+
+    const rawMessages = await listSessionMessages(c, share.session_id, share.user_id);
+    const allowAttachments = Boolean(share.allow_attachments);
+
+    const messages = rawMessages.map((msg) => ({
+      id: msg.id,
+      session_id: msg.session_id,
+      role: msg.role,
+      content: msg.content,
+      model: msg.model,
+      reasoning_summary: msg.reasoning_summary,
+      created_at: msg.created_at,
+      attachments: allowAttachments ? (msg.attachments ?? []) : [],
+    }));
+
+    return c.json({
+      title: session.title,
+      messages,
+      allow_attachments: allowAttachments,
+      theme: share.theme,
+      created_at: Number(share.created_at),
+    });
   });

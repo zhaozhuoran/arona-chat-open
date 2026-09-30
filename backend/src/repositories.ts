@@ -139,6 +139,83 @@ export class SessionRepository {
   }
 }
 
+export interface ChatShareRow {
+  token: string;
+  session_id: string;
+  user_id: string;
+  allow_attachments: number;
+  theme: string;
+  expires_at: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export class ShareRepository {
+  constructor(private db: D1Database) {}
+
+  async listSharesBySession(sessionId: string, userId: string): Promise<ChatShareRow[]> {
+    return (
+      await this.db
+        .prepare(
+          "SELECT token, session_id, user_id, allow_attachments, theme, expires_at, created_at, updated_at FROM chat_shares WHERE session_id = ? AND user_id = ? ORDER BY created_at DESC"
+        )
+        .bind(sessionId, userId)
+        .all<ChatShareRow>()
+    ).results;
+  }
+
+  async findShareByToken(token: string): Promise<ChatShareRow | null> {
+    return this.db
+      .prepare(
+        "SELECT token, session_id, user_id, allow_attachments, theme, expires_at, created_at, updated_at FROM chat_shares WHERE token = ? LIMIT 1"
+      )
+      .bind(token)
+      .first<ChatShareRow>();
+  }
+
+  async createShare(
+    token: string,
+    sessionId: string,
+    userId: string,
+    allowAttachments: boolean,
+    theme: string,
+    expiresAt: number | null,
+    now: number
+  ): Promise<void> {
+    await this.db
+      .prepare(
+        "INSERT INTO chat_shares (token, session_id, user_id, allow_attachments, theme, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      )
+      .bind(token, sessionId, userId, allowAttachments ? 1 : 0, theme, expiresAt, now, now)
+      .run();
+  }
+
+  async updateShare(
+    token: string,
+    userId: string,
+    allowAttachments: boolean,
+    theme: string,
+    expiresAt: number | null,
+    now: number
+  ): Promise<boolean> {
+    const result = await this.db
+      .prepare(
+        "UPDATE chat_shares SET allow_attachments = ?, theme = ?, expires_at = ?, updated_at = ? WHERE token = ? AND user_id = ?"
+      )
+      .bind(allowAttachments ? 1 : 0, theme, expiresAt, now, token, userId)
+      .run();
+    return Boolean(result.success && Number(result.meta.changes ?? 0) > 0);
+  }
+
+  async deleteShare(token: string, userId: string): Promise<boolean> {
+    const result = await this.db
+      .prepare("DELETE FROM chat_shares WHERE token = ? AND user_id = ?")
+      .bind(token, userId)
+      .run();
+    return Boolean(result.success && Number(result.meta.changes ?? 0) > 0);
+  }
+}
+
 export class MessageRepository {
   constructor(private db: D1Database) {}
 

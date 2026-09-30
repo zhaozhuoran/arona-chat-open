@@ -4,7 +4,11 @@ import { ClerkProvider } from '@clerk/clerk-react'
 import 'katex/dist/katex.min.css'
 import './index.css'
 import App from './App.tsx'
+import { SharedChatView } from './components/SharedChatView.tsx'
 import { CLERK_PUBLISHABLE_KEY, PREVIEW_PASSWORD } from './config'
+
+const shareMatch = /^\/share\/([^/]+)$/.exec(window.location.pathname.replace(/\/+$/, ""));
+const shareToken = shareMatch ? decodeURIComponent(shareMatch[1]).trim() : null;
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -86,7 +90,9 @@ if (!PUBLISHABLE_KEY && !PREVIEW_PASSWORD) {
   createRoot(rootElement).render(
     <StrictMode>
       <ErrorBoundary>
-        {PUBLISHABLE_KEY ? (
+        {shareToken ? (
+          <SharedChatView token={shareToken} />
+        ) : PUBLISHABLE_KEY ? (
           <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
             <App />
           </ClerkProvider>

@@ -15,6 +15,7 @@ const AttachmentLibraryPanel = lazy(() => import("./components/AttachmentLibrary
 const AuthPanel = lazy(() => import("./components/AuthPanel").then(m => ({ default: m.AuthPanel })));
 const LibraryPanel = lazy(() => import("./components/LibraryPanel").then(m => ({ default: m.LibraryPanel })));
 const SettingsPanel = lazy(() => import("./components/SettingsPanel").then(m => ({ default: m.SettingsPanel })));
+const ShareModal = lazy(() => import("./components/ShareModal").then(m => ({ default: m.ShareModal })));
 import { useAuth } from "@clerk/clerk-react";
 import { useStore } from "./store/useStore";
 import { isPreviewAvailable, IS_CLERK_AVAILABLE, PREVIEW_PASSWORD } from "./config";
@@ -66,6 +67,7 @@ function App() {
   const lastScrollY = useRef(0);
   const [attachmentLibraryOpen, setAttachmentLibraryOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [shareModalTarget, setShareModalTarget] = useState<{ id: string; title: string } | null>(null);
   const [menuSessionId, setMenuSessionId] = useState<string | null>(null);
   const [renameSessionTarget, setRenameSessionTarget] = useState<{ id: string; title: string } | null>(null);
   const [renameTitleInput, setRenameTitleInput] = useState("");
@@ -171,6 +173,10 @@ function App() {
     autoGenerateSessionTitle,
     archiveSession,
     pinSession,
+    listShares,
+    createShare,
+    updateShare,
+    deleteShare,
     refreshAttachmentLibrary,
     deleteAttachment,
     refreshLibrary,
@@ -268,6 +274,10 @@ function App() {
     autoGenerateSessionTitle: state.autoGenerateSessionTitle,
     archiveSession: state.archiveSession,
     pinSession: state.pinSession,
+    listShares: state.listShares,
+    createShare: state.createShare,
+    updateShare: state.updateShare,
+    deleteShare: state.deleteShare,
     refreshAttachmentLibrary: state.refreshAttachmentLibrary,
     deleteAttachment: state.deleteAttachment,
     refreshLibrary: state.refreshLibrary,
@@ -914,6 +924,18 @@ function App() {
                             type="button"
                             onClick={() => {
                               setMenuSessionId(null);
+                              if (window.innerWidth < 1080) {
+                                setSidebarOpen(false);
+                              }
+                              setShareModalTarget({ id: session.id, title: session.title || "Untitled Chat" });
+                            }}
+                          >
+                            Share conversation
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMenuSessionId(null);
                               void autoGenerateSessionTitle(session.id).catch((error) => {
                                 pushToast(error instanceof Error ? error.message : "Failed to auto-generate title.", "error");
                               });
@@ -1041,13 +1063,15 @@ function App() {
               </div>
             </div>
             {hasConversationStarted ? (
-              <div
-                className="ba-topbar-info"
-                style={{ opacity: topInfoOpacity, pointerEvents: topInfoOpacity > 0 ? "auto" : "none" }}
-              >
-                <span>{displayedModel}</span>
-                <span>{tokenCount} tokens</span>
-                <strong>{topCostText}</strong>
+              <div className="flex items-center gap-2">
+                <div
+                  className="ba-topbar-info"
+                  style={{ opacity: topInfoOpacity, pointerEvents: topInfoOpacity > 0 ? "auto" : "none" }}
+                >
+                  <span>{displayedModel}</span>
+                  <span>{tokenCount} tokens</span>
+                  <strong>{topCostText}</strong>
+                </div>
               </div>
             ) : null}
           </header>
@@ -1362,6 +1386,22 @@ function App() {
           />
         )}
       </Suspense>
+
+      {shareModalTarget && (
+        <Suspense fallback={null}>
+          <ShareModal
+            sessionId={shareModalTarget.id}
+            sessionTitle={shareModalTarget.title}
+            userTheme={profile?.theme || "ethereal-light"}
+            onClose={() => setShareModalTarget(null)}
+            listShares={listShares}
+            createShare={createShare}
+            updateShare={updateShare}
+            deleteShare={deleteShare}
+            pushToast={pushToast}
+          />
+        </Suspense>
+      )}
 
       {renameSessionTarget ? (
         <div className="ba-modal-backdrop" role="presentation" onClick={closeRenameDialog}>

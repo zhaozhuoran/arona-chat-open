@@ -18,6 +18,8 @@ import type {
   Workspace,
   DailyBudgetStatus,
   UserLimitsStatus,
+  ChatShare,
+  SharedChatData,
 } from "@arona-chat/shared";
 export type {
   AiProvider,
@@ -37,6 +39,8 @@ export type {
   Workspace,
   DailyBudgetStatus,
   UserLimitsStatus,
+  ChatShare,
+  SharedChatData,
 };
 
 type ToastType = "success" | "error" | "info";
@@ -202,6 +206,11 @@ export interface Store {
   autoGenerateSessionTitle: (sessionId: string) => Promise<void>;
   archiveSession: (sessionId: string, archived?: boolean) => Promise<void>;
   pinSession: (sessionId: string, pinned?: boolean) => Promise<void>;
+
+  listShares: (sessionId: string) => Promise<ChatShare[]>;
+  createShare: (sessionId: string, payload?: { allow_attachments?: boolean; theme?: string; expires_in_seconds?: number | null }) => Promise<ChatShare>;
+  updateShare: (token: string, payload: { allow_attachments?: boolean; theme?: string; expires_in_seconds?: number | null }) => Promise<void>;
+  deleteShare: (token: string) => Promise<void>;
 
   refreshPasskeys: () => Promise<void>;
   registerPasskey: (nickname?: string) => Promise<void>;
@@ -738,10 +747,6 @@ export const convertImageToSdrIfPossible = async (
 
     const exceedsMaxDim = compressionEnabled && (origWidth > maxDim || origHeight > maxDim);
 
-    if (!exceedsMaxDim && SDR_COMPATIBLE_IMAGE_TYPES.includes(file.type as (typeof SDR_COMPATIBLE_IMAGE_TYPES)[number])) {
-      return file;
-    }
-
     let targetWidth = origWidth;
     let targetHeight = origHeight;
 
@@ -766,7 +771,7 @@ export const convertImageToSdrIfPossible = async (
     const isPng = file.type === "image/png";
     const isWebp = file.type === "image/webp";
     const outputType = isPng ? "image/png" : isWebp ? "image/webp" : "image/jpeg";
-    const quality = outputType === "image/png" ? undefined : 0.85;
+    const quality = outputType === "image/png" ? undefined : 0.92;
 
     const blob = await new Promise<Blob | null>((resolve) => {
       canvas.toBlob(resolve, outputType, quality);

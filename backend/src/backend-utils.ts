@@ -64,7 +64,7 @@ export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 export const DEFAULT_MODEL = "google/gemini-3-flash-preview";
 export const DEFAULT_PASSKEY_RP_NAME = "Arona Chat";
 export const MAX_SESSION_TITLE_LENGTH = 60;
-export const LATEST_SCHEMA_VERSION = 25;
+export const LATEST_SCHEMA_VERSION = 26;
 export const EMPTY_MODEL_TEXT_FALLBACK = " ";
 export const API_FILES_PREFIX_RE = /^\/api\/files\/+/;
 export const AUTHENTICATED_FILE_PROXY_PATH_RE = /\/api\/files\/(?!public(?:\?|$))/;
@@ -1359,6 +1359,15 @@ export const ensureDatabaseReady = async (db: D1Database): Promise<void> => {
       if (currentVersion < 25) {
         await applySchemaV25(db);
         currentVersion = 25;
+        await db
+          .prepare("UPDATE schema_meta SET version = ?, updated_at = ? WHERE id = 1")
+          .bind(currentVersion, Date.now())
+          .run();
+      }
+
+      if (currentVersion < 26) {
+        await applySchemaV26(db);
+        currentVersion = 26;
         await db
           .prepare("UPDATE schema_meta SET version = ?, updated_at = ? WHERE id = 1")
           .bind(currentVersion, Date.now())
@@ -3771,6 +3780,23 @@ export const applySchemaV24 = async (db: D1Database): Promise<void> => {
 export const applySchemaV25 = async (db: D1Database): Promise<void> => {
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_request_logs_user_created ON request_logs(user_id, created_at)").run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_usage_records_user_created ON usage_records(user_id, created_at)").run();
+};
+
+export const applySchemaV26 = async (db: D1Database): Promise<void> => {
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS chat_shares (
+      token TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      allow_attachments INTEGER NOT NULL DEFAULT 0,
+      theme TEXT NOT NULL DEFAULT 'ethereal-light',
+      expires_at INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  `).run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_chat_shares_session ON chat_shares(session_id, user_id)").run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_chat_shares_expires ON chat_shares(expires_at)").run();
 };
 
 export const isModelAllowed = async (

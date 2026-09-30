@@ -63,6 +63,10 @@ export interface ChatSliceActions {
   autoGenerateSessionTitle: (sessionId: string) => Promise<void>;
   archiveSession: (sessionId: string, archived?: boolean) => Promise<void>;
   pinSession: (sessionId: string, pinned?: boolean) => Promise<void>;
+  listShares: (sessionId: string) => Promise<import("@arona-chat/shared").ChatShare[]>;
+  createShare: (sessionId: string, payload?: { allow_attachments?: boolean; theme?: string; expires_in_seconds?: number | null }) => Promise<import("@arona-chat/shared").ChatShare>;
+  updateShare: (token: string, payload: { allow_attachments?: boolean; theme?: string; expires_in_seconds?: number | null }) => Promise<void>;
+  deleteShare: (token: string) => Promise<void>;
 }
 
 export type ChatSlice = ChatSliceState & ChatSliceActions;
@@ -1074,5 +1078,64 @@ export const createChatSlice: StateCreator<Store, [], [], ChatSlice> = (set, get
       body: JSON.stringify({ pinned }),
     });
     await get().refreshSessions();
+  },
+
+  listShares: async (sessionId) => {
+    if (get().previewMode) {
+      return [];
+    }
+    const token = ensureToken(get().token);
+    const data = await requestJson<{ shares: import("@arona-chat/shared").ChatShare[] }>(
+      `/api/sessions/${encodeURIComponent(sessionId)}/shares`,
+      { method: "GET", token }
+    );
+    return data.shares || [];
+  },
+
+  createShare: async (sessionId, payload = {}) => {
+    if (get().previewMode) {
+      throw new Error("Sharing is not available in preview mode.");
+    }
+    const token = ensureToken(get().token);
+    const data = await requestJson<{ share: import("@arona-chat/shared").ChatShare }>(
+      `/api/sessions/${encodeURIComponent(sessionId)}/shares`,
+      {
+        method: "POST",
+        token,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }
+    );
+    return data.share;
+  },
+
+  updateShare: async (tokenParam, payload) => {
+    if (get().previewMode) {
+      return;
+    }
+    const token = ensureToken(get().token);
+    await requestJson<{ success: boolean }>(
+      `/api/shares/${encodeURIComponent(tokenParam)}`,
+      {
+        method: "PUT",
+        token,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  deleteShare: async (tokenParam) => {
+    if (get().previewMode) {
+      return;
+    }
+    const token = ensureToken(get().token);
+    await requestJson<{ success: boolean }>(
+      `/api/shares/${encodeURIComponent(tokenParam)}`,
+      {
+        method: "DELETE",
+        token,
+      }
+    );
   },
 });
